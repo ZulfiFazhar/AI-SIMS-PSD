@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = os.getenv("APP_NAME")
     environment: str = os.getenv("ENVIRONMENT")
     debug: bool = os.getenv("DEBUG")
+    version: str = os.getenv("VERSION")
     
     # Server settings
     host: str = os.getenv("HOST")
