@@ -1,9 +1,9 @@
 from pydantic_settings import BaseSettings
-from typing import List
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
+
 
 class Settings(BaseSettings):
     # Basic app settings
@@ -11,20 +11,27 @@ class Settings(BaseSettings):
     environment: str = os.getenv("ENVIRONMENT")
     debug: bool = os.getenv("DEBUG")
     version: str = os.getenv("VERSION")
-    
+
     # Server settings
     host: str = os.getenv("HOST")
     port: int = os.getenv("PORT")
 
     # CORS settings
     allowed_origins: str = os.getenv("ALLOWED_ORIGINS")
-    
+
     # Security settings (production)
     allowed_hosts: str = os.getenv("ALLOWED_HOSTS")
     secret_key: str = os.getenv("SECRET_KEY")
 
     # ML settings
     ml_models_path: str = os.getenv("ML_MODELS_PATH")
+
+    # Database settings
+    database_url: str = os.getenv("DATABASE_URL")
+
+    # Firebase settings
+    firebase_credentials_path: str = os.getenv("FIREBASE_CREDENTIALS_PATH")
+    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID")
 
     # Logging settings
     log_level: str = os.getenv("LOG_LEVEL")
@@ -38,9 +45,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
-    
+
     @property
     def is_development(self) -> bool:
         return self.environment.lower() == "development"
+
 
 settings = Settings()
