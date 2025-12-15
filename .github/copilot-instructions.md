@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a **FastAPI-based AI service** using **uv** for dependency management. The application follows a layered architecture with clear separation between API routes, business logic, and ML components.
+This is a **FastAPI-based AI service** using **uv** for dependency management. The application follows a layered architecture with clear separation between API routes, business logic, and ML components. Authentication is handled via **Firebase Auth** with user data stored in **MySQL using SQLAlchemy**.
 
 ## Architecture Pattern
 
@@ -20,7 +20,8 @@ app/main.py (entry)
       ├── / (index route - inline in server.py)
       ├── /health (app/api/health_route.py)
       └── /api/v1 (app/api/v1/router.py)
-          └── /ping (app/api/v1/routes/ping_route.py)
+          ├── /ping (app/api/v1/routes/ping_route.py)
+          └── /auth (app/api/v1/routes/auth_route.py)
 ```
 
 **Adding new routes:**
@@ -138,8 +139,8 @@ In `app/core/server.py`, middlewares are applied in reverse order:
 
 `app/models/` is for **data models** (DTOs, ORM models), NOT ML models:
 
-- Pydantic models for request/response DTOs
-- SQLAlchemy models if database is added
+- Pydantic models for request/response DTOs (e.g., `auth_dto.py`)
+- SQLAlchemy models for database tables (e.g., `user.py`)
 - Domain models/dataclasses
 
 ### Logging
@@ -174,3 +175,46 @@ In `app/core/server.py`, middlewares are applied in reverse order:
 
 **Add middleware:**
 Add in `app/core/server.py:setup_middlewares()` using `app.add_middleware()` or `@app.middleware("http")` decorator
+
+## Authentication Workflow
+
+**Client-side authentication:**
+
+1. User signs in with Firebase (Google, Email/Password, etc.)
+2. Get ID token: `const token = await user.getIdToken()`
+3. Send to backend: `POST /api/v1/auth/login` with `{"firebase_token": token}`
+4. Store user info from response
+5. For protected endpoints, include: `Authorization: Bearer <token>`
+
+**Backend protected route:**
+
+```python
+@router.get("/protected")
+async def protected(
+    firebase_uid: str = Depends(get_current_user_firebase_uid),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+    # ... use user
+```
+
+**Available auth endpoints:**
+
+- `POST /api/v1/auth/login` - Login/register with Firebase token
+- `GET /api/v1/auth/me` - Get current user profile (protected)
+- `PUT /api/v1/auth/me` - Update profile (protected)
+- `DELETE /api/v1/auth/me` - Deactivate account (protected)
+
+## Database Setup
+
+**Required steps before first run:**
+
+1. Create MySQL database
+2. Update `.env` with connection string: `DATABASE_URL=mysql+pymysql://user:pass@host:3306/dbname`
+3. Tables auto-created on startup via `init_db()` in lifespan manager
+4. User model has Firebase UID as unique identifier mapping to Firebase Auth
+
+**Migration pattern (if needed):**
+
+- Currently using `Base.metadata.create_all()` for simple table creation
+- For production, consider adding Alembic for migrations
