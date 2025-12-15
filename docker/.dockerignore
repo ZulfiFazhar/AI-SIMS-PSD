@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage
+
+# Documentation
+*.md
+docs/
+
+# Docker files (already in context)
+docker/
+docker-compose.yaml
+.dockerignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Firebase credentials (will be mounted as volume)
+firebase-credentials.json
+*.json
+
+# Project specific files
+test-firebase-token.html
+get_firebase_token.py
+serve_static.py
+public/
+notebooks/
+TESTING_GUIDE.md
+DOCKER_GUIDE.md
+QUICKSTART.md
+
+# Shell scripts
+*.sh
+*.bat
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
