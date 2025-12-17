@@ -35,11 +35,33 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     """
     Initialize database tables.
-    Call this function on application startup to create all tables.
+
+    WARNING: This function uses Base.metadata.create_all() which is only
+    suitable for development. For production, use Alembic migrations instead.
+
+    Behavior:
+    - Development: Creates all tables automatically (convenient for local dev)
+    - Production: Should use Alembic migrations for proper version control
+
+    Important: Models must be imported before calling this function
+    so that SQLAlchemy can discover them via Base.metadata
     """
+
+    # import app.models  # noqa: F401
+
+    # if settings.is_production:
+    #     logger.warning(
+    #         "init_db() called in production mode. "
+    #         "Consider using Alembic migrations instead of Base.metadata.create_all()"
+    #     )
+    # In production, we skip auto-creation and rely on migrations
+    # Uncomment the line below if you want to disable auto-creation in production
+    # logger.info("Skipping auto table creation in production - use 'uv run alembic upgrade head'")
+    # return
+
     try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
+        # Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully (development mode)")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
         raise

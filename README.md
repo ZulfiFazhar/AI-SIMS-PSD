@@ -73,6 +73,36 @@ Follow these steps to set up the local development environment.
 
 The application uses a `.env` file to manage configuration. Copy `.env.example` or create a new `.env` file in the project root.
 
+### Database Setup
+
+This project uses **Alembic** for database migrations. See [MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for quick start.
+
+#### First Time Setup:
+
+```sh
+# 1. Configure database URL in .env
+DATABASE_URL=mysql+pymysql://user:password@localhost:3306/dbname
+
+# 2. Create initial migration
+uv run alembic revision --autogenerate -m "Initial migration"
+
+# 3. Apply migration
+uv run alembic upgrade head
+```
+
+#### Adding New Models:
+
+```sh
+# 1. Create model in app/models/
+# 2. Import in app/models/__init__.py
+# 3. Generate migration
+uv run alembic revision --autogenerate -m "Add new table"
+# 4. Apply migration
+uv run alembic upgrade head
+```
+
+See [alembic/README.md](alembic/README.md) for comprehensive documentation.
+
 ## Running the Application
 
 Use `uv run` to execute the application server.

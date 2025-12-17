@@ -19,16 +19,15 @@ app/main.py (entry)
   └── app/core/server.py (factory)
       ├── / (index route - inline in server.py)
       ├── /health (app/api/health_route.py)
-      └── /api/v1 (app/api/v1/router.py)
-          ├── /ping (app/api/v1/routes/ping_route.py)
-          └── /auth (app/api/v1/routes/auth_route.py)
+      └── /api (app/api/router.py)
+          └── /auth (app/api/routes/auth_route.py)
 ```
 
 **Adding new routes:**
 
-1. Create route file in `app/api/v1/routes/` (e.g., `my_route.py`)
-2. Import and include in `app/api/v1/router.py` using `router_v1.include_router(my_route.router)`
-3. Routes automatically get `/api/v1` prefix and `["v1"]` tag
+1. Create route file in `app/api/routes/` (e.g., `my_route.py`)
+2. Import and include in `app/api/router.py` using `api_router.include_router(my_route.router)`
+3. Routes automatically get `/api` prefix
 
 ### Response Schema Pattern
 
@@ -139,8 +138,9 @@ In `app/core/server.py`, middlewares are applied in reverse order:
 
 `app/models/` is for **data models** (DTOs, ORM models), NOT ML models:
 
-- Pydantic models for request/response DTOs (e.g., `auth_dto.py`)
-- SQLAlchemy models for database tables (e.g., `user.py`)
+- Pydantic models for request/response DTOs in `app/models/dto/` (e.g., `auth_dto.py`, `user_dto.py`)
+- SQLAlchemy ORM models for database tables (e.g., `user_model.py`)
+- `app/models/__init__.py` centralizes all model imports for SQLAlchemy metadata registration
 - Domain models/dataclasses
 
 ### Logging
@@ -151,21 +151,39 @@ In `app/core/server.py`, middlewares are applied in reverse order:
 
 ## Key Files Reference
 
-| File                   | Purpose                                            |
-| ---------------------- | -------------------------------------------------- |
-| `app/core/server.py`   | Application factory, middleware setup, root routes |
-| `app/core/config.py`   | Centralized configuration (Settings class)         |
-| `app/core/schema.py`   | Standard response schemas and helper functions     |
-| `app/api/v1/router.py` | V1 API route aggregator                            |
-| `pyproject.toml`       | Dependencies and project metadata (managed by uv)  |
+| File                           | Purpose                                                 |
+| ------------------------------ | ------------------------------------------------------- |
+| `app/core/server.py`           | Application factory, middleware setup, root routes      |
+| `app/core/config.py`           | Centralized configuration (Settings class)              |
+| `app/core/schema.py`           | Standard response schemas and helper functions          |
+| `app/core/database.py`         | SQLAlchemy engine, session management, database init    |
+| `app/core/security.py`         | Firebase authentication, JWT verification, dependencies |
+| `app/api/router.py`            | API route aggregator (includes all route modules)       |
+| `app/models/__init__.py`       | Model registration for SQLAlchemy metadata              |
+| `app/models/user_model.py`     | User ORM model (SQLAlchemy)                             |
+| `app/models/dto/`              | Pydantic DTOs for request/response validation           |
+| `app/services/auth_service.py` | Authentication business logic (login, profile, etc.)    |
+| `alembic.ini`                  | Alembic configuration for database migrations           |
+| `alembic/env.py`               | Alembic environment setup with auto-discovery           |
+| `pyproject.toml`               | Dependencies and project metadata (managed by uv)       |
+| `docs/MIGRATION_GUIDE.md`      | Quick start guide for database migrations               |
 
 ## Common Tasks
 
 **Add a new API endpoint:**
 
-1. Create `app/api/v1/routes/feature_route.py` with router
-2. Include in `app/api/v1/router.py`: `router_v1.include_router(feature_route.router)`
+1. Create `app/api/routes/feature_route.py` with router
+2. Include in `app/api/router.py`: `api_router.include_router(feature_route.router)`
 3. Use `BaseResponse` model and `create_success_response()` helper
+
+**Add a new database model:**
+
+1. Create SQLAlchemy model in `app/models/feature_model.py`
+2. Import in `app/models/__init__.py` to register with Base.metadata
+3. Create Pydantic DTOs in `app/models/dto/feature_dto.py`
+4. Generate migration: `uv run alembic revision --autogenerate -m "Add feature table"`
+5. Review generated migration in `alembic/versions/`
+6. Apply migration: `uv run alembic upgrade head`
 
 **Add environment variable:**
 
@@ -182,39 +200,154 @@ Add in `app/core/server.py:setup_middlewares()` using `app.add_middleware()` or 
 
 1. User signs in with Firebase (Google, Email/Password, etc.)
 2. Get ID token: `const token = await user.getIdToken()`
-3. Send to backend: `POST /api/v1/auth/login` with `{"firebase_token": token}`
+3. Send to backend: `POST /api/auth/login` with `{"firebase_token": token}`
 4. Store user info from response
 5. For protected endpoints, include: `Authorization: Bearer <token>`
 
 **Backend protected route:**
 
 ```python
+from app.core.security import get_current_user_firebase_uid
+from app.core.database import get_db
+from app.models.user_model import User
+from sqlalchemy.orm import Session
+
 @router.get("/protected")
 async def protected(
     firebase_uid: str = Depends(get_current_user_firebase_uid),
     db: Session = Depends(get_db)
 ):
     user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
-    # ... use user
+    # ... use user data
 ```
 
 **Available auth endpoints:**
 
-- `POST /api/v1/auth/login` - Login/register with Firebase token
-- `GET /api/v1/auth/me` - Get current user profile (protected)
-- `PUT /api/v1/auth/me` - Update profile (protected)
-- `DELETE /api/v1/auth/me` - Deactivate account (protected)
+- `POST /api/auth/login` - Login/register with Firebase token
+- `GET /api/auth/me` - Get current user profile (protected)
+- `PUT /api/auth/me` - Update profile (protected)
+- `DELETE /api/auth/me` - Deactivate account (protected)
+
+**Dependencies for protected routes:**
+
+```python
+from app.core.security import get_current_user_firebase_uid
+from app.core.database import get_db
+from sqlalchemy.orm import Session
+
+@router.get("/protected")
+async def protected_endpoint(
+    firebase_uid: str = Depends(get_current_user_firebase_uid),
+    db: Session = Depends(get_db)
+):
+    # firebase_uid is verified, query user from database
+    user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+    return create_success_response(data={"user_id": user.id})
+```
 
 ## Database Setup
 
-**Required steps before first run:**
+### First-Time Setup (Clone Project)
 
-1. Create MySQL database
-2. Update `.env` with connection string: `DATABASE_URL=mysql+pymysql://user:pass@host:3306/dbname`
-3. Tables auto-created on startup via `init_db()` in lifespan manager
-4. User model has Firebase UID as unique identifier mapping to Firebase Auth
+1. **Create MySQL database:**
 
-**Migration pattern (if needed):**
+   ```sql
+   CREATE DATABASE ai_inkubator CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
 
-- Currently using `Base.metadata.create_all()` for simple table creation
-- For production, consider adding Alembic for migrations
+2. **Configure environment:**
+
+   ```bash
+   # Copy .env.example to .env
+   cp .env.example .env
+
+   # Update DATABASE_URL in .env
+   DATABASE_URL=mysql+pymysql://user:password@localhost:3306/ai_inkubator
+   ```
+
+3. **Install dependencies:**
+
+   ```bash
+   uv sync
+   ```
+
+4. **Apply migrations:**
+
+   ```bash
+   # Apply all existing migrations
+   uv run alembic upgrade head
+
+   # Verify current migration
+   uv run alembic current
+   ```
+
+5. **Run application:**
+   ```bash
+   uv run fastapi dev
+   ```
+
+### Database Migrations with Alembic
+
+**Project uses Alembic for version-controlled schema changes.**
+
+**Creating new migrations:**
+
+```bash
+# Auto-generate migration from model changes
+uv run alembic revision --autogenerate -m "Add new table"
+
+# Review generated migration file in alembic/versions/
+# Edit if needed (Alembic doesn't catch everything)
+
+# Apply migration
+uv run alembic upgrade head
+```
+
+**Common Alembic commands:**
+
+```bash
+# Check current migration status
+uv run alembic current
+
+# View migration history
+uv run alembic history --verbose
+
+# Rollback last migration
+uv run alembic downgrade -1
+
+# Rollback to specific revision
+uv run alembic downgrade <revision_id>
+
+# Create empty migration (for data migrations)
+uv run alembic revision -m "Custom data migration"
+```
+
+**Important notes:**
+
+- Always import new models in `app/models/__init__.py` before running `--autogenerate`
+- Review generated migrations - Alembic doesn't detect all changes (indexes, constraints)
+- Test migrations on dev database before production
+- Commit migration files to version control
+- See `docs/MIGRATION_GUIDE.md` for detailed guide
+- See `alembic/README.md` for comprehensive documentation
+
+### Database Model Pattern
+
+**User model structure:**
+
+- `firebase_uid` (String(128), unique, indexed) - Links to Firebase Auth
+- `email` (String(255), unique, indexed)
+- `display_name`, `photo_url`, `phone_number` (optional metadata)
+- `is_active` (Boolean, default=True) - Soft delete flag
+- `email_verified` (Boolean, default=False)
+- `created_at`, `updated_at` (DateTime with timezone)
+- `last_login` (DateTime, nullable)
+
+**When adding new models:**
+
+1. Inherit from `Base` (from `app.core.database`)
+2. Use `__tablename__` for explicit table name
+3. Add `__table_args__ = {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"}` for MySQL compatibility
+4. Include `created_at` and `updated_at` timestamp columns
+5. Add indexes on frequently queried columns
+6. Import in `app/models/__init__.py` for metadata registration

@@ -34,7 +34,7 @@ class UserUpdateRequest(BaseModel):
 class UserResponse(BaseModel):
     """User information response"""
 
-    id: int
+    id: str
     firebase_uid: str
     email: str
     display_name: Optional[str] = None
@@ -50,7 +50,7 @@ class UserResponse(BaseModel):
         from_attributes = True
         json_schema_extra = {
             "example": {
-                "id": 1,
+                "id": "550e8400-e29b-41d4-a716-446655440000",
                 "firebase_uid": "abc123xyz789",
                 "email": "user@example.com",
                 "display_name": "John Doe",

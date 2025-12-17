@@ -8,7 +8,7 @@ import time
 import logging
 
 from app.api import health_route
-from app.api.v1.router import router_v1
+from app.api.router import router_v1
 from app.core.config import settings
 from app.core.schema import create_success_response
 from app.core.database import init_db, close_db
@@ -107,8 +107,8 @@ def index_route(app) -> FastAPI:
 
 
 def v1_route(app) -> FastAPI:
-    """Include v1 API routes"""
-    app.include_router(router_v1, prefix="/api/v1", tags=["v1"])
+    """Include API routes"""
+    app.include_router(router_v1, prefix="/api")
     return app
 
 
