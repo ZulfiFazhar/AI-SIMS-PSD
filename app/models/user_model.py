@@ -10,19 +10,19 @@ def generate_short_id(length: int = 4) -> str:
     """
     Generate a short random ID using alphanumeric characters (uppercase + digits).
     Uses secrets module for cryptographically strong random generation.
-    
+
     Args:
         length: Length of the ID (default: 4)
-        
+
     Returns:
         Random alphanumeric string of specified length
-        
+
     Note:
         With 4 characters using [A-Z0-9], there are 36^4 = 1,679,616 possible combinations.
         Ensure uniqueness checks in the database to prevent collisions.
     """
     alphabet = string.ascii_uppercase + string.digits  # A-Z, 0-9
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 class User(Base):
