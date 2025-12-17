@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user_firebase_uid
 from app.core.schema import BaseResponse
-from app.models.auth_dto import UserLoginRequest, UserUpdateRequest
+from app.models.dto.auth_dto import UserLoginRequest, UserUpdateRequest
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["authentication"])

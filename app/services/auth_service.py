@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 import logging
 
-from app.models.user import User
-from app.models.auth_dto import UserUpdateRequest, UserResponse, AuthResponse
+from app.models.user_model import User, generate_short_id
+from app.models.dto.auth_dto import UserUpdateRequest, UserResponse, AuthResponse
 from app.core.security import verify_firebase_token, get_firebase_user_info
 from app.core.schema import BaseResponse, create_success_response, create_error_response
 
@@ -42,7 +42,21 @@ class AuthService:
             is_new_user = False
 
             if not user:
+                # Generate unique ID with collision check
+                max_retries = 10
+                for attempt in range(max_retries):
+                    new_user_id = generate_short_id()
+                    existing = db.query(User).filter(User.id == new_user_id).first()
+                    if not existing:
+                        break
+                    if attempt == max_retries - 1:
+                        logger.error("Failed to generate unique user ID after max retries")
+                        return create_error_response(
+                            message="Failed to create user account. Please try again."
+                        )
+                
                 user = User(
+                    id=new_user_id,
                     firebase_uid=firebase_user["firebase_uid"],
                     email=firebase_user["email"],
                     display_name=firebase_user["display_name"],
