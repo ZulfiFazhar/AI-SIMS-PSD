@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+
 class UserLoginRequest(BaseModel):
     """Request body for user login with Firebase token"""
 
@@ -23,6 +24,7 @@ class UserUpdateRequest(BaseModel):
         json_schema_extra = {
             "example": {"display_name": "John Doe", "phone_number": "+6281234567890"}
         }
+
 
 class UserResponse(BaseModel):
     """User information response"""

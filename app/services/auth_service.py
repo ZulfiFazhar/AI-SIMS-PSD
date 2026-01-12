@@ -1,9 +1,7 @@
 import logging
 
-from datetime import datetime, timezone
 from fastapi import HTTPException
 
-from app.models.user_model import User
 from app.models.dto.auth_dto import UserUpdateRequest, UserResponse, AuthResponse
 from app.core.middleware import verify_firebase_token, get_firebase_user_info
 from app.core.schema import BaseResponse, create_success_response, create_error_response

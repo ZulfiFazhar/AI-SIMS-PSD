@@ -27,7 +27,9 @@ class TenantRegisterRequest(BaseModel):
     omzet: Decimal = Field(..., ge=0, description="Omzet usaha")
 
     # Social media accounts (JSON string)
-    akun_medsos: Optional[str] = Field(None, description="JSON string of social media accounts")
+    akun_medsos: Optional[str] = Field(
+        None, description="JSON string of social media accounts"
+    )
 
     @field_validator("nomor_telepon")
     @classmethod
@@ -135,7 +137,9 @@ class TenantUpdateStatusRequest(BaseModel):
     """Request body for updating tenant status (admin only)"""
 
     status: str = Field(..., description="Status: approved or rejected")
-    rejection_reason: Optional[str] = Field(None, description="Alasan penolakan jika status=rejected")
+    rejection_reason: Optional[str] = Field(
+        None, description="Alasan penolakan jika status=rejected"
+    )
 
     @field_validator("status")
     @classmethod

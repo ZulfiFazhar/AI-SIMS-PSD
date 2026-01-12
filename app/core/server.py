@@ -1,5 +1,4 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
@@ -46,8 +45,7 @@ async def lifespan(app: FastAPI):
 
 def setup_logging():
     logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper()),
-        format=settings.log_format
+        level=getattr(logging, settings.log_level.upper()), format=settings.log_format
     )
 
 
@@ -94,14 +92,9 @@ def index_route(app) -> FastAPI:
 
     @app.get("/", tags=["welcome"])
     def _():
-        response, status_code = create_success_response(
-            message="Welcome to the FastAPI application!",
-            data={
-                "version": settings.version,
-                "environment": settings.environment,
-            },
+        return create_success_response(
+            data={"message": "Welcome to FastAPI UV Backend!"}
         )
-        return JSONResponse(content=response.model_dump(), status_code=status_code)
 
     return app
 

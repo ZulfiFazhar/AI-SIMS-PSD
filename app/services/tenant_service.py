@@ -9,7 +9,10 @@ from app.models.dto.tenant_dto import (
     TenantResponse,
     BusinessDocumentResponse,
 )
-from app.repositories.tenant_repository import TenantRepository, BusinessDocumentRepository
+from app.repositories.tenant_repository import (
+    TenantRepository,
+    BusinessDocumentRepository,
+)
 from app.services.file_upload_service import file_upload_service
 from app.core.schema import BaseResponse, create_success_response, create_error_response
 
@@ -119,7 +122,9 @@ class TenantService:
                         allowed_extensions=[".pdf", ".jpg", ".jpeg", ".png"],
                         max_size_mb=5,
                     )
-                    logger.info(f"Sertifikat NIB uploaded successfully: {sertifikat_nib_url}")
+                    logger.info(
+                        f"Sertifikat NIB uploaded successfully: {sertifikat_nib_url}"
+                    )
 
                 # Upload proposal
                 if proposal and proposal.filename:
@@ -156,14 +161,18 @@ class TenantService:
 
                 # Upload laporan keuangan
                 if laporan_keuangan and laporan_keuangan.filename:
-                    logger.info(f"Uploading laporan keuangan: {laporan_keuangan.filename}")
+                    logger.info(
+                        f"Uploading laporan keuangan: {laporan_keuangan.filename}"
+                    )
                     laporan_keuangan_url = await file_upload_service.upload_file(
                         laporan_keuangan,
                         folder=f"tenants/{tenant.id}/documents",
                         allowed_extensions=[".pdf", ".xls", ".xlsx"],
                         max_size_mb=10,
                     )
-                    logger.info(f"Laporan keuangan uploaded successfully: {laporan_keuangan_url}")
+                    logger.info(
+                        f"Laporan keuangan uploaded successfully: {laporan_keuangan_url}"
+                    )
 
                 # Upload foto produk (multiple files)
                 if foto_produk and len(foto_produk) > 0:
@@ -176,10 +185,15 @@ class TenantService:
                     )
                     if foto_urls:
                         foto_produk_urls = json.dumps(foto_urls)
-                        logger.info(f"Foto produk uploaded successfully: {len(foto_urls)} files")
+                        logger.info(
+                            f"Foto produk uploaded successfully: {len(foto_urls)} files"
+                        )
 
             except Exception as upload_error:
-                logger.error(f"File upload error: {type(upload_error).__name__} - {str(upload_error)}", exc_info=True)
+                logger.error(
+                    f"File upload error: {type(upload_error).__name__} - {str(upload_error)}",
+                    exc_info=True,
+                )
                 # Continue without failing the registration
                 # Files can be uploaded later
 
@@ -203,8 +217,8 @@ class TenantService:
 
             # Prepare response
             tenant_response = TenantResponse.model_validate(tenant)
-            tenant_response.business_documents = BusinessDocumentResponse.model_validate(
-                business_doc
+            tenant_response.business_documents = (
+                BusinessDocumentResponse.model_validate(business_doc)
             )
 
             return create_success_response(
@@ -232,12 +246,15 @@ class TenantService:
 
             # Include business documents if exists
             if tenant.business_documents:
-                tenant_response.business_documents = BusinessDocumentResponse.model_validate(
-                    tenant.business_documents[0]
+                tenant_response.business_documents = (
+                    BusinessDocumentResponse.model_validate(
+                        tenant.business_documents[0]
+                    )
                 )
 
             return create_success_response(
-                message="Data tenant berhasil diambil", data=tenant_response.model_dump()
+                message="Data tenant berhasil diambil",
+                data=tenant_response.model_dump(),
             )
 
         except Exception as e:
@@ -305,7 +322,16 @@ class TenantService:
             url = await file_upload_service.upload_file(
                 file,
                 folder="tenants/business_documents",
-                allowed_extensions=[".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx", ".xls", ".xlsx"],
+                allowed_extensions=[
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".pdf",
+                    ".doc",
+                    ".docx",
+                    ".xls",
+                    ".xlsx",
+                ],
                 max_size_mb=10,
             )
             return url
@@ -329,7 +355,16 @@ class TenantService:
             urls = await file_upload_service.upload_multiple_files(
                 files,
                 folder="tenants/business_documents",
-                allowed_extensions=[".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx", ".xls", ".xlsx"],
+                allowed_extensions=[
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".pdf",
+                    ".doc",
+                    ".docx",
+                    ".xls",
+                    ".xlsx",
+                ],
                 max_size_mb=10,
             )
             return urls

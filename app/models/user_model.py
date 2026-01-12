@@ -7,6 +7,7 @@ from sqlalchemy.dialects.mysql import CHAR
 from app.core.database import Base
 from app.core.utils import generate_short_id
 
+
 class UserRole(str, enum.Enum):
     """
     User role enumeration.
@@ -18,6 +19,7 @@ class UserRole(str, enum.Enum):
     ADMIN = "admin"
     TENANT = "tenant"
     GUEST = "guest"
+
 
 class User(Base):
     """

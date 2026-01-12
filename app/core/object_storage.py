@@ -32,7 +32,9 @@ class R2Client:
                 "R2_PUBLIC_URL": settings.r2_public_url,
             }
 
-            missing_configs = [key for key, value in required_configs.items() if not value]
+            missing_configs = [
+                key for key, value in required_configs.items() if not value
+            ]
 
             if missing_configs:
                 logger.warning(
@@ -64,7 +66,9 @@ class R2Client:
                 if error_code == "404":
                     logger.error(f"R2 bucket '{settings.r2_bucket_name}' not found")
                 elif error_code == "403":
-                    logger.error(f"Access denied to R2 bucket '{settings.r2_bucket_name}'")
+                    logger.error(
+                        f"Access denied to R2 bucket '{settings.r2_bucket_name}'"
+                    )
                 else:
                     logger.error(f"R2 connection test failed: {e}")
                 self._client = None
