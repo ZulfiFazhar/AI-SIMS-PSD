@@ -1,29 +1,23 @@
-from sqlalchemy import Column, String, DateTime, Boolean
-from sqlalchemy.dialects.mysql import CHAR
+import enum
 from datetime import datetime, timezone
-import secrets
-import string
+
+from sqlalchemy import Column, String, DateTime, Boolean, Enum
+from sqlalchemy.dialects.mysql import CHAR
+
 from app.core.database import Base
+from app.core.utils import generate_short_id
 
-
-def generate_short_id(length: int = 4) -> str:
+class UserRole(str, enum.Enum):
     """
-    Generate a short random ID using alphanumeric characters (uppercase + digits).
-    Uses secrets module for cryptographically strong random generation.
-
-    Args:
-        length: Length of the ID (default: 4)
-
-    Returns:
-        Random alphanumeric string of specified length
-
-    Note:
-        With 4 characters using [A-Z0-9], there are 36^4 = 1,679,616 possible combinations.
-        Ensure uniqueness checks in the database to prevent collisions.
+    User role enumeration.
+    - ADMIN: Full system access, can approve tenant requests
+    - TENANT: Approved user with full application access
+    - GUEST: Default role after registration, limited access
     """
-    alphabet = string.ascii_uppercase + string.digits  # A-Z, 0-9
-    return "".join(secrets.choice(alphabet) for _ in range(length))
 
+    ADMIN = "admin"
+    TENANT = "tenant"
+    GUEST = "guest"
 
 class User(Base):
     """
@@ -50,6 +44,14 @@ class User(Base):
     display_name = Column(String(255), nullable=True)
     photo_url = Column(String(500), nullable=True)
     phone_number = Column(String(20), nullable=True)
+
+    # User role - default is 'guest' after registration
+    role = Column(
+        Enum(UserRole),
+        default=UserRole.GUEST,
+        nullable=False,
+        server_default="guest",
+    )
 
     # Account status
     is_active = Column(Boolean, default=True, nullable=False)
@@ -79,6 +81,7 @@ class User(Base):
             "display_name": self.display_name,
             "photo_url": self.photo_url,
             "phone_number": self.phone_number,
+            "role": self.role.value if isinstance(self.role, UserRole) else self.role,
             "is_active": self.is_active,
             "email_verified": self.email_verified,
             "created_at": self.created_at.isoformat() if self.created_at else None,

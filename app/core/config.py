@@ -35,7 +35,14 @@ class Settings(BaseSettings):
 
     # Logging settings
     log_level: str = os.getenv("LOG_LEVEL")
-    log_format: str = "%(asctime)s - %(levelname)s - %(message)s"
+    log_format: str = "%(levelname)s - %(asctime)s - %(message)s"
+
+    # Cloudflare R2 settings (S3 compatible storage)
+    r2_account_id: str = os.getenv("R2_ACCOUNT_ID")
+    r2_access_key_id: str = os.getenv("R2_ACCESS_KEY_ID")
+    r2_secret_access_key: str = os.getenv("R2_SECRET_ACCESS_KEY")
+    r2_bucket_name: str = os.getenv("R2_BUCKET_NAME")
+    r2_public_url: str = os.getenv("R2_PUBLIC_URL")
 
     class Config:
         env_file = ".env"

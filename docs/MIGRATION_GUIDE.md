@@ -15,7 +15,7 @@ uv sync
 Create your MySQL database:
 
 ```sql
-CREATE DATABASE ai_inkubator;
+CREATE DATABASE inkubator;
 ```
 
 ### Step 3: Configure Environment
@@ -23,7 +23,7 @@ CREATE DATABASE ai_inkubator;
 Set your `DATABASE_URL` in `.env`:
 
 ```env
-DATABASE_URL=mysql+pymysql://root:password@localhost:3306/ai_inkubator
+DATABASE_URL=mysql+pymysql://root:password@localhost:3306/inkubator
 ```
 
 ### Step 4: Apply Existing Migrations
