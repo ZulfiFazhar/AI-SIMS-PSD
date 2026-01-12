@@ -7,6 +7,7 @@ from app.models.tenant_model import TenantStatus
 from app.models.dto.tenant_dto import (
     TenantRegisterRequest,
     TenantResponse,
+    BusinessDocumentRequest,
     BusinessDocumentResponse,
 )
 from app.repositories.tenant_repository import (
@@ -47,7 +48,7 @@ class TenantService:
 
         Args:
             user_id: User ID from authentication
-            data: Tenant registration data
+            data: Tenant registration data (TenantRegisterRequest)
             logo: Logo file
             sertifikat_nib: NIB certificate file
             proposal: Proposal file
@@ -92,7 +93,7 @@ class TenantService:
 
             logger.info(f"Tenant created: {tenant.id} for user {user_id}")
 
-            # Upload files
+            # Initialize file URLs
             logo_url = None
             sertifikat_nib_url = None
             proposal_url = None
@@ -194,10 +195,13 @@ class TenantService:
                     f"File upload error: {type(upload_error).__name__} - {str(upload_error)}",
                     exc_info=True,
                 )
-                # Continue without failing the registration
-                # Files can be uploaded later
+                # Rollback tenant creation if file upload fails
+                self.tenant_repo.rollback()
+                return create_error_response(
+                    message=f"Gagal mengupload file: {str(upload_error)}"
+                )
 
-            # Create business documents record
+            # Create business documents record with uploaded URLs
             business_doc = self.doc_repo.create(
                 tenant_id=tenant.id,
                 logo_url=logo_url,
@@ -215,19 +219,50 @@ class TenantService:
 
             logger.info(f"Business documents created for tenant {tenant.id}")
 
-            # Prepare response
-            tenant_response = TenantResponse.model_validate(tenant)
-            tenant_response.business_documents = (
-                BusinessDocumentResponse.model_validate(business_doc)
-            )
+            # Prepare response - convert tenant to dict manually to avoid relationship issues
+            tenant_dict = {
+                "id": tenant.id,
+                "user_id": tenant.user_id,
+                "nama_ketua_tim": tenant.nama_ketua_tim,
+                "nim_nidn_ketua": tenant.nim_nidn_ketua,
+                "nama_anggota_tim": tenant.nama_anggota_tim,
+                "nim_nidn_anggota": tenant.nim_nidn_anggota,
+                "nomor_telepon": tenant.nomor_telepon,
+                "fakultas": tenant.fakultas,
+                "prodi": tenant.prodi,
+                "nama_bisnis": tenant.nama_bisnis,
+                "kategori_bisnis": tenant.kategori_bisnis,
+                "alamat_usaha": tenant.alamat_usaha,
+                "jenis_usaha": tenant.jenis_usaha,
+                "lama_usaha": tenant.lama_usaha,
+                "omzet": tenant.omzet,
+                "status": tenant.status.value,
+                "rejection_reason": tenant.rejection_reason,
+                "created_at": tenant.created_at,
+                "updated_at": tenant.updated_at,
+                "business_documents": {
+                    "id": business_doc.id,
+                    "tenant_id": business_doc.tenant_id,
+                    "logo_url": business_doc.logo_url,
+                    "akun_medsos": business_doc.akun_medsos,
+                    "sertifikat_nib_url": business_doc.sertifikat_nib_url,
+                    "proposal_url": business_doc.proposal_url,
+                    "bmc_url": business_doc.bmc_url,
+                    "rab_url": business_doc.rab_url,
+                    "laporan_keuangan_url": business_doc.laporan_keuangan_url,
+                    "foto_produk_urls": business_doc.foto_produk_urls,
+                    "created_at": business_doc.created_at,
+                    "updated_at": business_doc.updated_at,
+                }
+            }
 
             return create_success_response(
                 message="Pendaftaran tenant berhasil dikirim. Menunggu persetujuan admin.",
-                data=tenant_response.model_dump(),
+                data=tenant_dict,
             )
 
         except Exception as e:
-            logger.error(f"Error in register_tenant: {e}")
+            logger.error(f"Error in register_tenant: {e}", exc_info=True)
             self.tenant_repo.rollback()
             self.doc_repo.rollback()
             return create_error_response(
@@ -242,23 +277,56 @@ class TenantService:
             if not tenant:
                 return create_error_response(message="Tenant tidak ditemukan")
 
-            tenant_response = TenantResponse.model_validate(tenant)
+            # Build tenant dict manually to avoid SQLAlchemy relationship issues
+            tenant_dict = {
+                "id": tenant.id,
+                "user_id": tenant.user_id,
+                "nama_ketua_tim": tenant.nama_ketua_tim,
+                "nim_nidn_ketua": tenant.nim_nidn_ketua,
+                "nama_anggota_tim": tenant.nama_anggota_tim,
+                "nim_nidn_anggota": tenant.nim_nidn_anggota,
+                "nomor_telepon": tenant.nomor_telepon,
+                "fakultas": tenant.fakultas,
+                "prodi": tenant.prodi,
+                "nama_bisnis": tenant.nama_bisnis,
+                "kategori_bisnis": tenant.kategori_bisnis,
+                "alamat_usaha": tenant.alamat_usaha,
+                "jenis_usaha": tenant.jenis_usaha,
+                "lama_usaha": tenant.lama_usaha,
+                "omzet": tenant.omzet,
+                "status": tenant.status.value,
+                "rejection_reason": tenant.rejection_reason,
+                "created_at": tenant.created_at,
+                "updated_at": tenant.updated_at,
+            }
 
             # Include business documents if exists
-            if tenant.business_documents:
-                tenant_response.business_documents = (
-                    BusinessDocumentResponse.model_validate(
-                        tenant.business_documents[0]
-                    )
-                )
+            if tenant.business_documents and len(tenant.business_documents) > 0:
+                business_doc = tenant.business_documents[0]
+                tenant_dict["business_documents"] = {
+                    "id": business_doc.id,
+                    "tenant_id": business_doc.tenant_id,
+                    "logo_url": business_doc.logo_url,
+                    "akun_medsos": business_doc.akun_medsos,
+                    "sertifikat_nib_url": business_doc.sertifikat_nib_url,
+                    "proposal_url": business_doc.proposal_url,
+                    "bmc_url": business_doc.bmc_url,
+                    "rab_url": business_doc.rab_url,
+                    "laporan_keuangan_url": business_doc.laporan_keuangan_url,
+                    "foto_produk_urls": business_doc.foto_produk_urls,
+                    "created_at": business_doc.created_at,
+                    "updated_at": business_doc.updated_at,
+                }
+            else:
+                tenant_dict["business_documents"] = None
 
             return create_success_response(
                 message="Data tenant berhasil diambil",
-                data=tenant_response.model_dump(),
+                data=tenant_dict,
             )
 
         except Exception as e:
-            logger.error(f"Error getting tenant: {e}")
+            logger.error(f"Error getting tenant: {e}", exc_info=True)
             return create_error_response(message="Gagal mengambil data tenant")
 
     def update_tenant_status(

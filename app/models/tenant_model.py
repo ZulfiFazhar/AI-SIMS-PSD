@@ -1,7 +1,3 @@
-"""
-Tenant and BusinessDocument models for tenant registration.
-"""
-
 import enum
 from datetime import datetime, timezone
 from sqlalchemy import (
