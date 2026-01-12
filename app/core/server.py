@@ -12,7 +12,7 @@ from app.api.router import router_v1
 from app.core.config import settings
 from app.core.schema import create_success_response
 from app.core.database import init_db, close_db
-from app.core.security import init_firebase, close_firebase
+from app.core.middleware import init_firebase, close_firebase
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +44,11 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error during shutdown: {e}")
 
 
-# def setup_logging():
-#     logging.basicConfig(
-#         level=getattr(logging, settings.log_level.upper()),
-#         format=settings.log_format
-#     )
+def setup_logging():
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper()),
+        format=settings.log_format
+    )
 
 
 def setup_middlewares(app: FastAPI):
@@ -114,7 +114,7 @@ def v1_route(app) -> FastAPI:
 
 def create_application() -> FastAPI:
     """Create and configure FastAPI application"""
-    # setup_logging()
+    setup_logging()
 
     app = FastAPI(
         title=settings.app_name,

@@ -105,18 +105,6 @@ uv add package-name
 uv add --dev package-name
 ```
 
-### Docker
-
-```bash
-# Build image
-docker build -t fastapi-uv-backend .
-
-# Run container
-docker run -p 8000:8000 --env-file .env fastapi-uv-backend
-```
-
-**Important**: Dockerfile uses multi-stage build with `uv sync --frozen --no-dev` to ensure reproducible builds
-
 ## Project-Specific Conventions
 
 ### Middleware Order Matters
@@ -151,22 +139,29 @@ In `app/core/server.py`, middlewares are applied in reverse order:
 
 ## Key Files Reference
 
-| File                           | Purpose                                                 |
-| ------------------------------ | ------------------------------------------------------- |
-| `app/core/server.py`           | Application factory, middleware setup, root routes      |
-| `app/core/config.py`           | Centralized configuration (Settings class)              |
-| `app/core/schema.py`           | Standard response schemas and helper functions          |
-| `app/core/database.py`         | SQLAlchemy engine, session management, database init    |
-| `app/core/security.py`         | Firebase authentication, JWT verification, dependencies |
-| `app/api/router.py`            | API route aggregator (includes all route modules)       |
-| `app/models/__init__.py`       | Model registration for SQLAlchemy metadata              |
-| `app/models/user_model.py`     | User ORM model (SQLAlchemy)                             |
-| `app/models/dto/`              | Pydantic DTOs for request/response validation           |
-| `app/services/auth_service.py` | Authentication business logic (login, profile, etc.)    |
-| `alembic.ini`                  | Alembic configuration for database migrations           |
-| `alembic/env.py`               | Alembic environment setup with auto-discovery           |
-| `pyproject.toml`               | Dependencies and project metadata (managed by uv)       |
-| `docs/MIGRATION_GUIDE.md`      | Quick start guide for database migrations               |
+| File                           | Purpose                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| `app/core/server.py`           | Application factory, middleware setup, root routes            |
+| `app/core/config.py`           | Centralized configuration (Settings class)                    |
+| `app/core/schema.py`           | Standard response schemas and helper functions                |
+| `app/core/database.py`         | SQLAlchemy engine, session management, database init          |
+| `app/core/security.py`         | Firebase authentication, JWT verification, dependencies       |
+| `app/api/router.py`            | API route aggregator (includes all route modules)             |
+| `app/api/health_route.py`      | Health check endpoint                                         |
+| `app/api/routes/auth_route.py` | Authentication routes (login, profile, update, deactivate)    |
+| `app/models/__init__.py`       | Model registration for SQLAlchemy metadata                    |
+| `app/models/user_model.py`     | User ORM model with short ID, role, and Firebase integration  |
+| `app/models/dto/auth_dto.py`   | Authentication request/response DTOs (Pydantic)               |
+| `app/services/auth_service.py` | Auth business logic with short ID generation                  |
+| `app/services/health.py`       | Health check service                                          |
+| `alembic.ini`                  | Alembic configuration for database migrations                 |
+| `alembic/env.py`               | Alembic environment setup with auto-discovery                 |
+| `alembic/versions/`            | Migration history (4 migrations: initial, UUID, role changes) |
+| `pyproject.toml`               | Dependencies and project metadata (managed by uv)             |
+| `firebase-credentials.json`    | Firebase service account credentials (gitignored)             |
+| `docs/QUICKSTART.md`           | Quick start guide for getting started                         |
+| `docs/MIGRATION_GUIDE.md`      | Database migrations guide with Alembic                        |
+| `docs/SETUP_AUTH.md`           | Firebase authentication setup guide                           |
 
 ## Common Tasks
 
@@ -333,15 +328,37 @@ uv run alembic revision -m "Custom data migration"
 
 ### Database Model Pattern
 
-**User model structure:**
+**User model structure (app/models/user_model.py):**
 
+- `id` (CHAR(4), primary key) - Short 4-character random ID (e.g., "A1B2"), generated using `auth_service.generate_short_id()`
 - `firebase_uid` (String(128), unique, indexed) - Links to Firebase Auth
 - `email` (String(255), unique, indexed)
 - `display_name`, `photo_url`, `phone_number` (optional metadata)
+- `role` (Enum: UserRole) - User role: `admin`, `tenant`, or `guest` (default)
 - `is_active` (Boolean, default=True) - Soft delete flag
 - `email_verified` (Boolean, default=False)
 - `created_at`, `updated_at` (DateTime with timezone)
 - `last_login` (DateTime, nullable)
+
+**User Role System:**
+
+The project implements a three-tier role system (UserRole enum in user_model.py):
+
+- `ADMIN` - Full system access, can approve tenant requests
+- `TENANT` - Approved user with full application access
+- `GUEST` - Default role after registration, limited access (awaiting approval)
+
+New users are automatically assigned the `guest` role upon registration. Admins can promote users to `tenant` status.
+
+**Short ID System:**
+
+User IDs use a compact 4-character format (A-Z, 0-9) for:
+
+- Human-readable identifiers in UI
+- QR codes and compact displays
+- Easy reference in support tickets
+
+Generated via `auth_service.generate_short_id()` using cryptographically secure random generation (36^4 = 1,679,616 combinations).
 
 **When adding new models:**
 
@@ -351,3 +368,4 @@ uv run alembic revision -m "Custom data migration"
 4. Include `created_at` and `updated_at` timestamp columns
 5. Add indexes on frequently queried columns
 6. Import in `app/models/__init__.py` for metadata registration
+7. Include `to_dict()` method for easy serialization

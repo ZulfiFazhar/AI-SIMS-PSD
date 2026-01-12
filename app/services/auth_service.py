@@ -1,12 +1,13 @@
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
-from fastapi import HTTPException
 import logging
 
-from app.models.user_model import User, generate_short_id
+from datetime import datetime, timezone
+from fastapi import HTTPException
+
+from app.models.user_model import User
 from app.models.dto.auth_dto import UserUpdateRequest, UserResponse, AuthResponse
-from app.core.security import verify_firebase_token, get_firebase_user_info
+from app.core.middleware import verify_firebase_token, get_firebase_user_info
 from app.core.schema import BaseResponse, create_success_response, create_error_response
+from app.repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +15,10 @@ logger = logging.getLogger(__name__)
 class AuthService:
     """Service class for authentication and user management"""
 
-    @staticmethod
-    async def login_or_register(firebase_token: str, db: Session) -> BaseResponse:
+    def __init__(self, user_repository: UserRepository):
+        self.user_repo = user_repository
+
+    async def login_or_register(self, firebase_token: str) -> BaseResponse:
         """
         Authenticate user with Firebase token.
         If user doesn't exist in database, create new user.
@@ -23,7 +26,6 @@ class AuthService:
 
         Args:
             firebase_token: Firebase ID token from client
-            db: Database session
 
         Returns:
             BaseResponse with AuthResponse data
@@ -37,53 +39,41 @@ class AuthService:
 
             firebase_user = await get_firebase_user_info(firebase_uid)
 
-            user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+            user = self.user_repo.get_by_firebase_uid(firebase_uid)
 
             is_new_user = False
 
             if not user:
-                # Generate unique ID with collision check
-                max_retries = 10
-                for attempt in range(max_retries):
-                    new_user_id = generate_short_id()
-                    existing = db.query(User).filter(User.id == new_user_id).first()
-                    if not existing:
-                        break
-                    if attempt == max_retries - 1:
-                        logger.error(
-                            "Failed to generate unique user ID after max retries"
-                        )
-                        return create_error_response(
-                            message="Failed to create user account. Please try again."
-                        )
-
-                user = User(
-                    id=new_user_id,
-                    firebase_uid=firebase_user["firebase_uid"],
-                    email=firebase_user["email"],
-                    display_name=firebase_user["display_name"],
-                    photo_url=firebase_user["photo_url"],
-                    phone_number=firebase_user["phone_number"],
-                    email_verified=firebase_user["email_verified"],
-                    last_login=datetime.now(timezone.utc),
-                )
-                db.add(user)
-                is_new_user = True
-                logger.info(f"New user created: {user.email}")
+                try:
+                    user = self.user_repo.create(
+                        firebase_uid=firebase_user["firebase_uid"],
+                        email=firebase_user["email"],
+                        display_name=firebase_user["display_name"],
+                        photo_url=firebase_user["photo_url"],
+                        phone_number=firebase_user["phone_number"],
+                        email_verified=firebase_user["email_verified"],
+                    )
+                    is_new_user = True
+                    logger.info(f"New user created: {user.email}")
+                except Exception as e:
+                    logger.error(f"Failed to create user: {e}")
+                    self.user_repo.rollback()
+                    return create_error_response(
+                        message="Failed to create user account. Please try again."
+                    )
             else:
-                user.last_login = datetime.now(timezone.utc)
-
-                user.email = firebase_user["email"]
-                user.display_name = (
-                    firebase_user.get("display_name") or user.display_name
+                self.user_repo.update_last_login(user)
+                self.user_repo.update(
+                    user,
+                    email=firebase_user["email"],
+                    display_name=firebase_user.get("display_name") or user.display_name,
+                    photo_url=firebase_user.get("photo_url") or user.photo_url,
+                    email_verified=firebase_user["email_verified"],
                 )
-                user.photo_url = firebase_user.get("photo_url") or user.photo_url
-                user.email_verified = firebase_user["email_verified"]
-
                 logger.info(f"User logged in: {user.email}")
 
-            db.commit()
-            db.refresh(user)
+            self.user_repo.commit()
+            self.user_repo.refresh(user)
 
             user_response = UserResponse.model_validate(user)
             auth_response = AuthResponse(user=user_response, is_new_user=is_new_user)
@@ -99,25 +89,23 @@ class AuthService:
             return create_error_response(message=e.detail)
         except Exception as e:
             logger.error(f"Error in login_or_register: {e}")
-            db.rollback()
+            self.user_repo.rollback()
             return create_error_response(
                 message="Authentication failed. Please try again."
             )
 
-    @staticmethod
-    def get_user_profile(firebase_uid: str, db: Session) -> BaseResponse:
+    def get_user_profile(self, firebase_uid: str) -> BaseResponse:
         """
         Get user profile by Firebase UID.
 
         Args:
             firebase_uid: Firebase user ID
-            db: Database session
 
         Returns:
             BaseResponse with UserResponse data
         """
         try:
-            user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+            user = self.user_repo.get_by_firebase_uid(firebase_uid)
 
             if not user:
                 return create_error_response(message="User not found")
@@ -133,9 +121,8 @@ class AuthService:
             logger.error(f"Error getting user profile: {e}")
             return create_error_response(message="Failed to retrieve user profile")
 
-    @staticmethod
     def update_user_profile(
-        firebase_uid: str, update_data: UserUpdateRequest, db: Session
+        self, firebase_uid: str, update_data: UserUpdateRequest
     ) -> BaseResponse:
         """
         Update user profile.
@@ -143,27 +130,24 @@ class AuthService:
         Args:
             firebase_uid: Firebase user ID
             update_data: User update request data
-            db: Database session
 
         Returns:
             BaseResponse with updated UserResponse data
         """
         try:
-            user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+            user = self.user_repo.get_by_firebase_uid(firebase_uid)
 
             if not user:
                 return create_error_response(message="User not found")
 
-            if update_data.display_name is not None:
-                user.display_name = update_data.display_name
+            self.user_repo.update(
+                user,
+                display_name=update_data.display_name,
+                phone_number=update_data.phone_number,
+            )
 
-            if update_data.phone_number is not None:
-                user.phone_number = update_data.phone_number
-
-            user.updated_at = datetime.now(timezone.utc)
-
-            db.commit()
-            db.refresh(user)
+            self.user_repo.commit()
+            self.user_repo.refresh(user)
 
             user_response = UserResponse.model_validate(user)
 
@@ -173,35 +157,31 @@ class AuthService:
 
         except Exception as e:
             logger.error(f"Error updating user profile: {e}")
-            db.rollback()
+            self.user_repo.rollback()
             return create_error_response(message="Failed to update profile")
 
-    @staticmethod
-    def deactivate_user(firebase_uid: str, db: Session) -> BaseResponse:
+    def deactivate_user(self, firebase_uid: str) -> BaseResponse:
         """
         Deactivate user account.
 
         Args:
             firebase_uid: Firebase user ID
-            db: Database session
 
         Returns:
             BaseResponse with success/error message
         """
         try:
-            user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+            user = self.user_repo.get_by_firebase_uid(firebase_uid)
 
             if not user:
                 return create_error_response(message="User not found")
 
-            user.is_active = False
-            user.updated_at = datetime.now(timezone.utc)
-
-            db.commit()
+            self.user_repo.deactivate(user)
+            self.user_repo.commit()
 
             return create_success_response(message="Account deactivated successfully")
 
         except Exception as e:
             logger.error(f"Error deactivating user: {e}")
-            db.rollback()
+            self.user_repo.rollback()
             return create_error_response(message="Failed to deactivate account")

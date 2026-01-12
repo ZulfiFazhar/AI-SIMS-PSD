@@ -2,9 +2,6 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-# ============= Request DTOs =============
-
-
 class UserLoginRequest(BaseModel):
     """Request body for user login with Firebase token"""
 
@@ -27,10 +24,6 @@ class UserUpdateRequest(BaseModel):
             "example": {"display_name": "John Doe", "phone_number": "+6281234567890"}
         }
 
-
-# ============= Response DTOs =============
-
-
 class UserResponse(BaseModel):
     """User information response"""
 
@@ -40,6 +33,7 @@ class UserResponse(BaseModel):
     display_name: Optional[str] = None
     photo_url: Optional[str] = None
     phone_number: Optional[str] = None
+    role: str  # 'admin', 'tenant', or 'guest'
     is_active: bool
     email_verified: bool
     created_at: datetime
@@ -56,6 +50,7 @@ class UserResponse(BaseModel):
                 "display_name": "John Doe",
                 "photo_url": "https://example.com/photo.jpg",
                 "phone_number": "+6281234567890",
+                "role": "guest",
                 "is_active": True,
                 "email_verified": True,
                 "created_at": "2024-01-01T00:00:00",

@@ -102,6 +102,22 @@ def verify_firebase_token(token: str) -> dict:
 security = HTTPBearer()
 
 
+async def get_firebase_token(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> str:
+    """
+    FastAPI dependency to extract Firebase token from Authorization header.
+    Does not verify the token - use this for login/register endpoints.
+
+    Usage:
+        @router.post("/login")
+        async def login(token: str = Depends(get_firebase_token)):
+            # Token will be extracted from Authorization: Bearer <token>
+            ...
+    """
+    return credentials.credentials
+
+
 async def get_current_user_firebase_uid(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> str:
