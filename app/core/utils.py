@@ -21,7 +21,7 @@ def generate_short_id(length: int = 4) -> str:
     Note:
         With 4 characters using [A-Z0-9], there are 36^4 = 1,679,616 possible combinations.
         Ensure uniqueness checks in the database to prevent collisions.
-    
+
     Example:
         >>> generate_short_id()
         'A1B2'

@@ -11,7 +11,6 @@ from app.core.object_storage import r2_client
 logger = logging.getLogger(__name__)
 
 
-
 class FileUploadService:
     """Service for handling file uploads to Cloudflare R2"""
 
@@ -46,7 +45,9 @@ class FileUploadService:
         try:
             # Check if R2 client is configured
             if not r2_client.is_configured:
-                raise Exception("R2 client not configured. Check R2 environment variables.")
+                raise Exception(
+                    "R2 client not configured. Check R2 environment variables."
+                )
 
             # Validate filename exists
             if not file.filename:
@@ -66,7 +67,7 @@ class FileUploadService:
             # Read file content
             content = await file.read()
             size_mb = len(content) / (1024 * 1024)
-            
+
             logger.info(f"File size: {size_mb:.2f}MB")
 
             # Check file size
@@ -87,7 +88,9 @@ class FileUploadService:
 
             object_key = f"{folder}/{safe_filename}"
 
-            logger.info(f"Uploading to R2: {object_key} (Bucket: {r2_client.bucket_name})")
+            logger.info(
+                f"Uploading to R2: {object_key} (Bucket: {r2_client.bucket_name})"
+            )
 
             response = r2_client.client.put_object(
                 Bucket=r2_client.bucket_name,
@@ -96,7 +99,9 @@ class FileUploadService:
                 ContentType=file.content_type or "application/octet-stream",
             )
 
-            logger.info(f"R2 response: {response.get('ResponseMetadata', {}).get('HTTPStatusCode')}")
+            logger.info(
+                f"R2 response: {response.get('ResponseMetadata', {}).get('HTTPStatusCode')}"
+            )
 
             public_url = f"{r2_client.public_url}/{object_key}"
             logger.info(f"File uploaded successfully: {public_url}")
@@ -107,8 +112,8 @@ class FileUploadService:
             logger.error(f"Validation error: {e}")
             raise
         except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-            error_message = e.response.get('Error', {}).get('Message', str(e))
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            error_message = e.response.get("Error", {}).get("Message", str(e))
             logger.error(f"R2 ClientError [{error_code}]: {error_message}")
             raise Exception(f"Gagal mengupload file ke R2: {error_message}")
         except Exception as e:
@@ -138,7 +143,9 @@ class FileUploadService:
 
         for file in files:
             try:
-                url = await self.upload_file(file, folder, allowed_extensions, max_size_mb)
+                url = await self.upload_file(
+                    file, folder, allowed_extensions, max_size_mb
+                )
                 uploaded_urls.append(url)
             except Exception as e:
                 logger.error(f"Failed to upload {file.filename}: {e}")
@@ -171,7 +178,9 @@ class FileUploadService:
             logger.error(f"Delete error: {e}")
             return False
 
-    def generate_presigned_url(self, file_url: str, expiration: int = 3600) -> Optional[str]:
+    def generate_presigned_url(
+        self, file_url: str, expiration: int = 3600
+    ) -> Optional[str]:
         """
         Generate presigned URL for private file access.
 

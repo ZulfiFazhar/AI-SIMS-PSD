@@ -4,7 +4,16 @@ Tenant and BusinessDocument models for tenant registration.
 
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Enum, Integer, DECIMAL, Text, ForeignKey
+from sqlalchemy import (
+    Column,
+    String,
+    DateTime,
+    Enum,
+    Integer,
+    DECIMAL,
+    Text,
+    ForeignKey,
+)
 from sqlalchemy.dialects.mysql import CHAR
 from sqlalchemy.orm import relationship
 
@@ -100,7 +109,9 @@ class Tenant(Base):
             "jenis_usaha": self.jenis_usaha,
             "lama_usaha": self.lama_usaha,
             "omzet": float(self.omzet) if self.omzet else None,
-            "status": self.status.value if isinstance(self.status, TenantStatus) else self.status,
+            "status": self.status.value
+            if isinstance(self.status, TenantStatus)
+            else self.status,
             "rejection_reason": self.rejection_reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -116,7 +127,12 @@ class BusinessDocument(Base):
     __tablename__ = "business_documents"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    tenant_id = Column(CHAR(4), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, unique=True)
+    tenant_id = Column(
+        CHAR(4),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
 
     # Document URLs (stored in Cloudflare R2)
     logo_url = Column(String(500), nullable=True)
