@@ -194,6 +194,22 @@ class UserRepository:
         user.updated_at = datetime.now(timezone.utc)
         return user
 
+    def update_role(self, user: User, role: UserRole) -> User:
+        """
+        Update user role.
+
+        Args:
+            user: User object to update
+            role: New role to assign
+
+        Returns:
+            Updated User object
+        """
+        user.role = role
+        user.updated_at = datetime.now(timezone.utc)
+        logger.info(f"User {user.id} role updated to {role.value}")
+        return user
+
     def commit(self):
         """Commit database transaction"""
         self.db.commit()
