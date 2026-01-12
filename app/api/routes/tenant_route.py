@@ -277,6 +277,7 @@ async def upload_multiple_test_files(
     foto_produk: Optional[List[UploadFile]] = File(None),
     # Dependencies
     user_id: str = Depends(get_user_id_from_firebase),
+    tenant_service: TenantService = Depends(get_tenant_service),
 ):
     """
     Test endpoint untuk upload complete tenant registration (form + files).

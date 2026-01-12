@@ -63,6 +63,19 @@ class TenantRegisterRequest(BaseModel):
             }
         }
 
+class BusinessDocumentRequest(BaseModel):
+    """
+    Request body for business document uploads
+    """
+    id: int
+    logo_url: Optional[str] = None
+    akun_medsos: Optional[str] = None
+    sertifikat_nib_url: Optional[str] = None
+    proposal_url: Optional[str] = None
+    bmc_url: Optional[str] = None
+    rab_url: Optional[str] = None
+    laporan_keuangan_url: Optional[str] = None
+    foto_produk_urls: Optional[str] = None
 
 class BusinessDocumentResponse(BaseModel):
     """Business document information response"""
