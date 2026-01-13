@@ -189,6 +189,55 @@ async def get_my_tenant_registration(
     return tenant_service.get_tenant_by_user_id(user_id)
 
 
+@router.get("/", response_model=BaseResponse)
+async def get_all_tenants(
+    status: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    tenant_service: TenantService = Depends(get_tenant_service),
+    admin_id: str = Depends(require_admin_role),
+):
+    """
+    Dapatkan semua tenant (Admin only).
+
+    **Query Parameters:**
+    - status (optional): Filter berdasarkan status (pending/approved/rejected)
+    - skip (optional): Jumlah record yang dilewati untuk pagination (default: 0)
+    - limit (optional): Jumlah maksimal record yang dikembalikan (default: 100, max: 100)
+
+    **Returns:**
+    - List semua tenant beserta dokumen bisnis
+    - Total tenant yang dikembalikan
+    - Informasi pagination
+
+    **Requires authentication:**
+    ```
+    Authorization: Bearer <firebase_id_token>
+    ```
+
+    **Note:** Endpoint ini dilindungi dengan role check admin.
+    Hanya user dengan role ADMIN yang dapat mengakses endpoint ini.
+    """
+    from app.models.tenant_model import TenantStatus
+    
+    # Convert string status to enum if provided
+    status_enum = None
+    if status:
+        try:
+            status_enum = TenantStatus(status)
+        except ValueError:
+            from app.core.schema import create_error_response
+            return create_error_response(
+                message=f"Status tidak valid. Gunakan: pending, approved, atau rejected"
+            )
+    
+    return tenant_service.get_all_tenants(
+        status=status_enum,
+        skip=skip,
+        limit=limit,
+    )
+
+
 @router.put("/{tenant_id}/status", response_model=BaseResponse)
 async def update_tenant_status(
     tenant_id: str,

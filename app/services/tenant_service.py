@@ -410,3 +410,84 @@ class TenantService:
             logger.error(f"Error updating tenant status: {e}", exc_info=True)
             self.tenant_repo.rollback()
             return create_error_response(message="Gagal mengubah status tenant")
+
+    def get_all_tenants(
+        self,
+        status: Optional[TenantStatus] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> BaseResponse:
+        """
+        Get all tenants with optional status filter (admin only).
+
+        Args:
+            status: Filter by status (pending, approved, rejected)
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+
+        Returns:
+            BaseResponse with list of tenants
+        """
+        try:
+            tenants = self.tenant_repo.get_all(status=status, skip=skip, limit=limit)
+
+            tenants_list = []
+            for tenant in tenants:
+                # Build tenant dict manually
+                tenant_dict = {
+                    "id": tenant.id,
+                    "user_id": tenant.user_id,
+                    "nama_ketua_tim": tenant.nama_ketua_tim,
+                    "nim_nidn_ketua": tenant.nim_nidn_ketua,
+                    "nama_anggota_tim": tenant.nama_anggota_tim,
+                    "nim_nidn_anggota": tenant.nim_nidn_anggota,
+                    "nomor_telepon": tenant.nomor_telepon,
+                    "fakultas": tenant.fakultas,
+                    "prodi": tenant.prodi,
+                    "nama_bisnis": tenant.nama_bisnis,
+                    "kategori_bisnis": tenant.kategori_bisnis,
+                    "alamat_usaha": tenant.alamat_usaha,
+                    "jenis_usaha": tenant.jenis_usaha,
+                    "lama_usaha": tenant.lama_usaha,
+                    "omzet": tenant.omzet,
+                    "status": tenant.status.value,
+                    "rejection_reason": tenant.rejection_reason,
+                    "created_at": tenant.created_at,
+                    "updated_at": tenant.updated_at,
+                }
+
+                # Include business documents if exists
+                if tenant.business_documents and len(tenant.business_documents) > 0:
+                    business_doc = tenant.business_documents[0]
+                    tenant_dict["business_documents"] = {
+                        "id": business_doc.id,
+                        "tenant_id": business_doc.tenant_id,
+                        "logo_url": business_doc.logo_url,
+                        "akun_medsos": business_doc.akun_medsos,
+                        "sertifikat_nib_url": business_doc.sertifikat_nib_url,
+                        "proposal_url": business_doc.proposal_url,
+                        "bmc_url": business_doc.bmc_url,
+                        "rab_url": business_doc.rab_url,
+                        "laporan_keuangan_url": business_doc.laporan_keuangan_url,
+                        "foto_produk_urls": business_doc.foto_produk_urls,
+                        "created_at": business_doc.created_at,
+                        "updated_at": business_doc.updated_at,
+                    }
+                else:
+                    tenant_dict["business_documents"] = None
+
+                tenants_list.append(tenant_dict)
+
+            return create_success_response(
+                message=f"Berhasil mengambil {len(tenants_list)} tenant",
+                data={
+                    "tenants": tenants_list,
+                    "total": len(tenants_list),
+                    "skip": skip,
+                    "limit": limit,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting all tenants: {e}", exc_info=True)
+            return create_error_response(message="Gagal mengambil data tenant")
