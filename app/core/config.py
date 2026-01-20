@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
 load_dotenv()
 
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
     environment: str = os.getenv("ENVIRONMENT")
     debug: bool = os.getenv("DEBUG")
     version: str = os.getenv("VERSION")
+    base_dir: Path = Path(__file__).resolve().parent.parent.parent
 
     # Server settings
     host: str = os.getenv("HOST")

@@ -5,15 +5,23 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "accelerate>=1.12.0",
     "alembic>=1.14.0",
     "boto3>=1.42.24",
     "cryptography>=46.0.3",
     "fastapi[standard]>=0.117.1",
     "firebase-admin>=7.1.0",
+    "hf-xet>=1.2.0",
+    "numpy>=2.2.6",
+    "pdfplumber>=0.11.9",
     "pydantic-settings>=2.11.0",
     "pymysql>=1.1.2",
+    "pypdf>=6.6.0",
     "python-dotenv>=1.1.1",
+    "scikit-learn>=1.7.2",
     "sqlalchemy>=2.0.45",
+    "torch>=2.9.1",
+    "transformers[torch]>=4.57.3",
     "uvicorn>=0.37.0",
 ]
 
