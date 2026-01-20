@@ -99,6 +99,7 @@ class TenantService:
                 folder=f"tenants/{tenant_id}/logos",
                 allowed_extensions=[".jpg", ".jpeg", ".png"],
                 max_size_mb=2,
+                filename=logo.filename.rsplit('.', 1)[0],
             )
             logger.info(f"Logo uploaded: {file_urls['logo_url']}")
 
@@ -110,6 +111,7 @@ class TenantService:
                 folder=f"tenants/{tenant_id}/documents",
                 allowed_extensions=[".pdf", ".jpg", ".jpeg", ".png"],
                 max_size_mb=5,
+                filename=sertifikat_nib.filename.rsplit('.', 1)[0],
             )
             logger.info(f"Sertifikat NIB uploaded: {file_urls['sertifikat_nib_url']}")
 
@@ -121,6 +123,7 @@ class TenantService:
                 folder=f"tenants/{tenant_id}/documents",
                 allowed_extensions=[".pdf", ".doc", ".docx"],
                 max_size_mb=10,
+                filename=proposal.filename.rsplit('.', 1)[0],
             )
             logger.info(f"Proposal uploaded: {file_urls['proposal_url']}")
 
@@ -132,6 +135,7 @@ class TenantService:
                 folder=f"tenants/{tenant_id}/documents",
                 allowed_extensions=[".pdf", ".jpg", ".jpeg", ".png"],
                 max_size_mb=5,
+                filename=bmc.filename.rsplit('.', 1)[0],
             )
             logger.info(f"BMC uploaded: {file_urls['bmc_url']}")
 
@@ -143,6 +147,7 @@ class TenantService:
                 folder=f"tenants/{tenant_id}/documents",
                 allowed_extensions=[".pdf", ".xls", ".xlsx"],
                 max_size_mb=5,
+                filename=rab.filename.rsplit('.', 1)[0],
             )
             logger.info(f"RAB uploaded: {file_urls['rab_url']}")
 
@@ -154,6 +159,7 @@ class TenantService:
                 folder=f"tenants/{tenant_id}/documents",
                 allowed_extensions=[".pdf", ".xls", ".xlsx"],
                 max_size_mb=10,
+                filename=laporan_keuangan.filename.rsplit('.', 1)[0],
             )
             logger.info(f"Laporan keuangan uploaded: {file_urls['laporan_keuangan_url']}")
 
@@ -165,6 +171,7 @@ class TenantService:
                 folder=f"tenants/{tenant_id}/products",
                 allowed_extensions=[".jpg", ".jpeg", ".png"],
                 max_size_mb=5,
+                filename=foto_produk[0].filename.rsplit('.', 1)[0] if foto_produk else None,
             )
             if foto_urls:
                 file_urls["foto_produk_urls"] = json.dumps(foto_urls)

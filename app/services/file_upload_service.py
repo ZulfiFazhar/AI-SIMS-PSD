@@ -25,6 +25,7 @@ class FileUploadService:
         folder: str = "tenants",
         allowed_extensions: Optional[List[str]] = None,
         max_size_mb: int = 10,
+        filename: Optional[str] = None,
     ) -> str:
         """
         Upload single file to R2.
@@ -84,7 +85,10 @@ class FileUploadService:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             unique_id = str(uuid.uuid4())[:8]
             file_ext = os.path.splitext(file.filename)[1]
-            safe_filename = f"{timestamp}_{unique_id}{file_ext}"
+            if filename:
+                safe_filename = f"{filename}{file_ext}"
+            else:
+                safe_filename = f"{timestamp}_{unique_id}{file_ext}"
 
             object_key = f"{folder}/{safe_filename}"
 
@@ -126,6 +130,7 @@ class FileUploadService:
         folder: str = "tenants",
         allowed_extensions: Optional[List[str]] = None,
         max_size_mb: int = 10,
+        filename: Optional[str] = None,
     ) -> List[str]:
         """
         Upload multiple files to R2.
@@ -144,12 +149,11 @@ class FileUploadService:
         for file in files:
             try:
                 url = await self.upload_file(
-                    file, folder, allowed_extensions, max_size_mb
+                    file, folder, allowed_extensions, max_size_mb, filename=filename
                 )
                 uploaded_urls.append(url)
             except Exception as e:
                 logger.error(f"Failed to upload {file.filename}: {e}")
-                # Continue uploading other files
                 continue
 
         return uploaded_urls
