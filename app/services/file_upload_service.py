@@ -7,6 +7,7 @@ from fastapi import UploadFile
 import uuid
 
 from app.core.object_storage import r2_client
+from botocore.exceptions import ClientError as BotoClientError
 
 logger = logging.getLogger(__name__)
 

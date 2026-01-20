@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.tenant_model import TenantStatus, Tenant, BusinessDocument
 from app.models.user_model import UserRole
-from app.models.dto.tenant_dto import TenantRegisterRequest
+from app.models.dto.tenant_dto import TenantRegisterRequest, TenantUpdateRequest
 from app.repositories.tenant_repository import (
     TenantRepository,
     BusinessDocumentRepository,
@@ -498,3 +498,282 @@ class TenantService:
         except Exception as e:
             logger.error(f"Error getting all tenants: {e}", exc_info=True)
             return create_error_response(message="Gagal mengambil data tenant")
+
+    def update_tenant(
+        self,
+        tenant_id: str,
+        user_id: str,
+        data: TenantUpdateRequest,
+    ) -> BaseResponse:
+        """
+        Update tenant data.
+        
+        Args:
+            tenant_id: Tenant ID to update
+            user_id: User ID making the request (for ownership check)
+            data: Update request data
+            
+        Returns:
+            BaseResponse with updated tenant data
+        """
+        try:
+            # Get tenant
+            tenant = self.tenant_repo.get_by_id(tenant_id)
+            if not tenant:
+                return create_error_response(message="Tenant tidak ditemukan")
+            
+            # Check ownership - only the tenant owner can update
+            if tenant.user_id != user_id:
+                return create_error_response(
+                    message="Anda tidak memiliki akses untuk mengubah data tenant ini"
+                )
+            
+            # Check status - only pending and rejected tenants can be updated
+            if tenant.status not in [TenantStatus.PENDING, TenantStatus.REJECTED]:
+                return create_error_response(
+                    message=f"Data tenant dengan status {tenant.status.value} tidak dapat diubah. "
+                    f"Hanya tenant dengan status {tenant.status.value} yang dapat diubah."
+                )
+            
+            # Store original status to check if we need to reset
+            was_rejected = tenant.status == TenantStatus.REJECTED
+            
+            # Update tenant data (only non-None fields)
+            self.tenant_repo.update(
+                tenant=tenant,
+                nama_ketua_tim=data.nama_ketua_tim,
+                nim_nidn_ketua=data.nim_nidn_ketua,
+                nama_anggota_tim=data.nama_anggota_tim,
+                nim_nidn_anggota=data.nim_nidn_anggota,
+                nomor_telepon=data.nomor_telepon,
+                fakultas=data.fakultas,
+                prodi=data.prodi,
+                nama_bisnis=data.nama_bisnis,
+                kategori_bisnis=data.kategori_bisnis,
+                alamat_usaha=data.alamat_usaha,
+                jenis_usaha=data.jenis_usaha,
+                lama_usaha=data.lama_usaha,
+                omzet=float(data.omzet) if data.omzet is not None else None,
+            )
+            
+            # Reset status to PENDING if tenant was rejected
+            if was_rejected:
+                tenant.status = TenantStatus.PENDING
+                tenant.rejection_reason = None  # Clear rejection reason
+                logger.info(f"Tenant {tenant_id} status reset from REJECTED to PENDING")
+            
+            # Commit changes
+            self.tenant_repo.commit()
+            self.tenant_repo.refresh(tenant)
+            
+            logger.info(f"Tenant {tenant_id} updated successfully by user {user_id}")
+            
+            # Return updated tenant data
+            tenant_data = self._get_tenant_with_documents(tenant)
+            
+            return create_success_response(
+                message="Data tenant berhasil diperbarui",
+                data=tenant_data
+            )
+            
+        except Exception as e:
+            logger.error(f"Error updating tenant {tenant_id}: {e}", exc_info=True)
+            self.tenant_repo.rollback()
+            return create_error_response(message="Gagal memperbarui data tenant")
+
+    async def update_tenant_documents(
+        self,
+        tenant_id: str,
+        user_id: str,
+        logo: Optional[UploadFile] = None,
+        sertifikat_nib: Optional[UploadFile] = None,
+        proposal: Optional[UploadFile] = None,
+        bmc: Optional[UploadFile] = None,
+        rab: Optional[UploadFile] = None,
+        laporan_keuangan: Optional[UploadFile] = None,
+        foto_produk: Optional[List[UploadFile]] = None,
+        akun_medsos: Optional[str] = None,
+    ) -> BaseResponse:
+        """
+        Update tenant documents. Old files will be deleted before uploading new ones.
+        
+        Args:
+            tenant_id: Tenant ID to update
+            user_id: User ID making the request (for ownership check)
+            logo: New logo file (replaces old one)
+            sertifikat_nib: New NIB certificate file
+            proposal: New proposal file
+            bmc: New BMC file
+            rab: New RAB file
+            laporan_keuangan: New financial report file
+            foto_produk: New product photos
+            akun_medsos: Social media accounts JSON string
+            
+        Returns:
+            BaseResponse with updated tenant data
+        """
+        try:
+            # Get tenant
+            tenant = self.tenant_repo.get_by_id(tenant_id)
+            if not tenant:
+                return create_error_response(message="Tenant tidak ditemukan")
+            
+            # Check ownership
+            if tenant.user_id != user_id:
+                return create_error_response(
+                    message="Anda tidak memiliki akses untuk mengubah dokumen tenant ini"
+                )
+            
+            # Check status - only pending and rejected tenants can update documents
+            if tenant.status not in [TenantStatus.PENDING, TenantStatus.REJECTED]:
+                return create_error_response(
+                    message=f"Dokumen tenant dengan status {tenant.status.value} tidak dapat diubah. "
+                    "Hanya tenant dengan status pending atau rejected yang dapat diubah."
+                )
+            
+            # Get existing business documents
+            business_doc = self.doc_repo.get_by_tenant_id(tenant_id)
+            if not business_doc:
+                return create_error_response(
+                    message="Business documents tidak ditemukan untuk tenant ini"
+                )
+            
+            logger.info(f"Updating documents for tenant {tenant_id}")
+            
+            # Track which files to delete and new URLs
+            files_to_delete = []
+            new_urls = {}
+            
+            # Handle logo update
+            if logo and logo.filename:
+                if business_doc.logo_url:
+                    files_to_delete.append(business_doc.logo_url)
+                new_urls["logo_url"] = await file_upload_service.upload_file(
+                    logo,
+                    folder=f"tenants/{tenant_id}/logos",
+                    allowed_extensions=[".jpg", ".jpeg", ".png"],
+                    max_size_mb=2
+                )
+            
+            # Handle sertifikat NIB update
+            if sertifikat_nib and sertifikat_nib.filename:
+                if business_doc.sertifikat_nib_url:
+                    files_to_delete.append(business_doc.sertifikat_nib_url)
+                new_urls["sertifikat_nib_url"] = await file_upload_service.upload_file(
+                    sertifikat_nib,
+                    folder=f"tenants/{tenant_id}/documents",
+                    allowed_extensions=[".pdf", ".jpg", ".jpeg", ".png"],
+                    max_size_mb=5
+                )
+            
+            # Handle proposal update
+            if proposal and proposal.filename:
+                if business_doc.proposal_url:
+                    files_to_delete.append(business_doc.proposal_url)
+                new_urls["proposal_url"] = await file_upload_service.upload_file(
+                    proposal,
+                    folder=f"tenants/{tenant_id}/proposals",
+                    allowed_extensions=[".pdf", ".doc", ".docx"],
+                    max_size_mb=10
+                )
+            
+            # Handle BMC update
+            if bmc and bmc.filename:
+                if business_doc.bmc_url:
+                    files_to_delete.append(business_doc.bmc_url)
+                new_urls["bmc_url"] = await file_upload_service.upload_file(
+                    bmc,
+                    folder=f"tenants/{tenant_id}/documents",
+                    allowed_extensions=[".pdf", ".jpg", ".jpeg", ".png"],
+                    max_size_mb=5
+                )
+            
+            # Handle RAB update
+            if rab and rab.filename:
+                if business_doc.rab_url:
+                    files_to_delete.append(business_doc.rab_url)
+                new_urls["rab_url"] = await file_upload_service.upload_file(
+                    rab,
+                    folder=f"tenants/{tenant_id}/documents",
+                    allowed_extensions=[".pdf", ".xls", ".xlsx"],
+                    max_size_mb=5
+                )
+            
+            # Handle laporan keuangan update
+            if laporan_keuangan and laporan_keuangan.filename:
+                if business_doc.laporan_keuangan_url:
+                    files_to_delete.append(business_doc.laporan_keuangan_url)
+                new_urls["laporan_keuangan_url"] = await file_upload_service.upload_file(
+                    laporan_keuangan,
+                    folder=f"tenants/{tenant_id}/documents",
+                    allowed_extensions=[".pdf", ".xls", ".xlsx"],
+                    max_size_mb=10
+                )
+            
+            # Handle foto produk update (multiple files)
+            if foto_produk and len(foto_produk) > 0:
+                # Delete old product photos if they exist
+                if business_doc.foto_produk_urls:
+                    try:
+                        old_urls = json.loads(business_doc.foto_produk_urls)
+                        if isinstance(old_urls, list):
+                            files_to_delete.extend(old_urls)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to parse foto_produk_urls for tenant {tenant_id}")
+                
+                # Upload new product photos
+                foto_urls = await file_upload_service.upload_multiple_files(
+                    foto_produk,
+                    folder=f"tenants/{tenant_id}/products",
+                    allowed_extensions=[".jpg", ".jpeg", ".png"],
+                    max_size_mb=5
+                )
+                new_urls["foto_produk_urls"] = json.dumps(foto_urls)
+            
+            # Handle akun medsos update
+            if akun_medsos is not None:
+                new_urls["akun_medsos"] = akun_medsos
+            
+            # Update business documents in database
+            self.doc_repo.update(
+                document=business_doc,
+                **new_urls
+            )
+            
+            # Reset status to PENDING if tenant was rejected
+            if tenant.status == TenantStatus.REJECTED:
+                tenant.status = TenantStatus.PENDING
+                tenant.rejection_reason = None  # Clear rejection reason
+                self.tenant_repo.refresh(tenant)  # Ensure we have latest tenant data
+                logger.info(f"Tenant {tenant_id} status reset from REJECTED to PENDING after document update")
+            
+            # Commit database changes
+            self.doc_repo.commit()
+            self.doc_repo.refresh(business_doc)
+            
+            # Delete old files from R2 storage
+            deleted_count = 0
+            for file_url in files_to_delete:
+                if file_upload_service.delete_file(file_url):
+                    deleted_count += 1
+                    logger.info(f"Deleted old file: {file_url}")
+                else:
+                    logger.warning(f"Failed to delete old file: {file_url}")
+            
+            logger.info(f"Documents updated for tenant {tenant_id}. Deleted {deleted_count} old files.")
+            
+            # Refresh tenant to get updated relationships
+            self.tenant_repo.refresh(tenant)
+            
+            # Return updated tenant data
+            tenant_data = self._get_tenant_with_documents(tenant)
+            
+            return create_success_response(
+                message=f"Dokumen tenant berhasil diperbarui. {deleted_count} file lama dihapus.",
+                data=tenant_data
+            )
+            
+        except Exception as e:
+            logger.error(f"Error updating documents for tenant {tenant_id}: {e}", exc_info=True)
+            self.doc_repo.rollback()
+            return create_error_response(message=f"Gagal memperbarui dokumen tenant: {str(e)}")

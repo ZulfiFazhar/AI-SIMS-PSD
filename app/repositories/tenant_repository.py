@@ -136,6 +136,63 @@ class TenantRepository:
         self.db.add(tenant)
         return tenant
 
+    def update(
+        self,
+        tenant: Tenant,
+        nama_ketua_tim: Optional[str] = None,
+        nim_nidn_ketua: Optional[str] = None,
+        nama_anggota_tim: Optional[str] = None,
+        nim_nidn_anggota: Optional[str] = None,
+        nomor_telepon: Optional[str] = None,
+        fakultas: Optional[str] = None,
+        prodi: Optional[str] = None,
+        nama_bisnis: Optional[str] = None,
+        kategori_bisnis: Optional[str] = None,
+        alamat_usaha: Optional[str] = None,
+        jenis_usaha: Optional[str] = None,
+        lama_usaha: Optional[int] = None,
+        omzet: Optional[float] = None,
+    ) -> Tenant:
+        """
+        Update tenant data.
+
+        Args:
+            tenant: Tenant object to update
+            **kwargs: Fields to update (only non-None values will be updated)
+
+        Returns:
+            Updated Tenant object
+        """
+        if nama_ketua_tim is not None:
+            tenant.nama_ketua_tim = nama_ketua_tim
+        if nim_nidn_ketua is not None:
+            tenant.nim_nidn_ketua = nim_nidn_ketua
+        if nama_anggota_tim is not None:
+            tenant.nama_anggota_tim = nama_anggota_tim
+        if nim_nidn_anggota is not None:
+            tenant.nim_nidn_anggota = nim_nidn_anggota
+        if nomor_telepon is not None:
+            tenant.nomor_telepon = nomor_telepon
+        if fakultas is not None:
+            tenant.fakultas = fakultas
+        if prodi is not None:
+            tenant.prodi = prodi
+        if nama_bisnis is not None:
+            tenant.nama_bisnis = nama_bisnis
+        if kategori_bisnis is not None:
+            tenant.kategori_bisnis = kategori_bisnis
+        if alamat_usaha is not None:
+            tenant.alamat_usaha = alamat_usaha
+        if jenis_usaha is not None:
+            tenant.jenis_usaha = jenis_usaha
+        if lama_usaha is not None:
+            tenant.lama_usaha = lama_usaha
+        if omzet is not None:
+            tenant.omzet = omzet
+
+        tenant.updated_at = datetime.now(timezone.utc)
+        return tenant
+
     def update_status(
         self,
         tenant: Tenant,

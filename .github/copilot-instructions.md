@@ -1,33 +1,90 @@
-# Copilot Instructions for ai-inkubator
+# Copilot Instructions for ai-sims (AI Incubator Management System)
 
 ## Project Overview
 
-This is a **FastAPI-based AI service** using **uv** for dependency management. The application follows a layered architecture with clear separation between API routes, business logic, and ML components. Authentication is handled via **Firebase Auth** with user data stored in **MySQL using SQLAlchemy**.
+A **FastAPI-based AI-powered incubator management system** using **uv** for dependency management. Manages tenant registrations, business proposals, and AI-driven proposal classification using fine-tuned IndoBERT. Architecture follows a clean layered pattern with **repositories**, **services**, and **API routes**. Authentication via **Firebase Auth**, data persistence in **MySQL/SQLAlchemy**, file storage on **Cloudflare R2**.
 
 ## Architecture Pattern
 
+### Layered Architecture (Repository Pattern)
+
+```
+Routes (API endpoints)
+   ↓
+Services (business logic)
+   ↓
+Repositories (data access)
+   ↓
+Models (SQLAlchemy ORM)
+```
+
+**Key principle:** Routes should be thin - dependency injection of repositories into services, services orchestrate business logic, repositories handle database queries.
+
 ### Application Factory Pattern
 
-- `app/main.py` exports the app instance created by `app/core/server.py:create_application()`
-- All middleware, routes, and configuration are wired up in `create_application()`
-- Never create FastAPI instances elsewhere; always use the factory
+- `app/main.py` exports app instance from `app/core/server.py:create_application()`
+- All middleware, routes, configuration wired in factory
+- Never create FastAPI instances elsewhere
 
 ### Routing Hierarchy
 
 ```
 app/main.py (entry)
   └── app/core/server.py (factory)
-      ├── / (index route - inline in server.py)
-      ├── /health (app/api/health_route.py)
-      └── /api (app/api/router.py)
-          └── /auth (app/api/routes/auth_route.py)
+      ├── / (index route)
+      ├── /health (health_route.py)
+      └── /api (router.py - v1 API prefix)
+          ├── /auth (auth_route.py - login, profile, update)
+          ├── /tenant (tenant_route.py - registration, approval)
+          └── /proposal (proposal_route.py - AI classification)
 ```
 
-**Adding new routes:**
+**Adding routes:**
 
-1. Create route file in `app/api/routes/` (e.g., `my_route.py`)
-2. Import and include in `app/api/router.py` using `api_router.include_router(my_route.router)`
-3. Routes automatically get `/api` prefix
+1. Create `app/api/routes/feature_route.py` with `router = APIRouter(prefix="/feature", tags=["Feature"])`
+2. Include in `app/api/router.py`: `router_v1.include_router(feature_route.router)`
+3. Routes auto-prefixed with `/api`
+
+### Repository Pattern (NEW)
+
+**All database access through repositories** in `app/repositories/`:
+
+```python
+# app/repositories/feature_repository.py
+class FeatureRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_by_id(self, id: str) -> Optional[Feature]:
+        return self.db.query(Feature).filter(Feature.id == id).first()
+
+    def create(self, **kwargs) -> Feature:
+        instance = Feature(**kwargs)
+        self.db.add(instance)
+        self.db.commit()
+        self.db.refresh(instance)
+        return instance
+
+# app/services/feature_service.py
+class FeatureService:
+    def __init__(self, feature_repo: FeatureRepository):
+        self.feature_repo = feature_repo
+
+    def business_logic(self, id: str) -> BaseResponse:
+        feature = self.feature_repo.get_by_id(id)
+        # ... business logic ...
+        return create_success_response(data=feature.to_dict())
+
+# app/api/routes/feature_route.py
+def get_feature_service(db: Session = Depends(get_db)) -> FeatureService:
+    return FeatureService(FeatureRepository(db))
+
+@router.get("/{id}")
+async def get_feature(id: str, service: FeatureService = Depends(get_feature_service)):
+    return service.business_logic(id)
+```
+
+**Existing repositories:** `UserRepository`, `TenantRepository`, `BusinessDocumentRepository`
 
 ### Response Schema Pattern
 
@@ -41,15 +98,7 @@ async def endpoint():
     return create_success_response(message="Success", data={"key": "value"})
 ```
 
-Response structure:
-
-```json
-{
-  "status": "success|failed|error|warning",
-  "message": "Human-readable message",
-  "data": null | any
-}
-```
+Response: `{"status": "success|failed|error|warning", "message": "...", "data": null | any}`
 
 ### Configuration Management
 
@@ -59,22 +108,24 @@ Response structure:
 - Use `settings.is_production` or `settings.is_development` for environment checks
 - Config fields use `os.getenv()` - ensure `.env` has all vars from `.env.example`
 
-### Service Layer Pattern
+### Dependency Injection Pattern
 
-Business logic goes in `app/services/`:
+**Repository injection into services, services injected into routes:**
 
 ```python
-# app/services/my_service.py
-def my_business_logic() -> BaseResponse:
-    # Complex logic here
-    return create_success_response(...)
+# Route with multiple repository dependencies
+def get_tenant_service(db: Session = Depends(get_db)) -> TenantService:
+    tenant_repo = TenantRepository(db)
+    doc_repo = BusinessDocumentRepository(db)
+    user_repo = UserRepository(db)
+    return TenantService(tenant_repo, doc_repo, user_repo)
 
-# app/api/v1/routes/my_route.py
-from app.services.my_service import my_business_logic
-
-@router.get("/")
-async def endpoint():
-    return my_business_logic()
+@router.post("/register")
+async def register(
+    data: TenantRegisterRequest,
+    service: TenantService = Depends(get_tenant_service)
+):
+    return service.register_tenant(data)
 ```
 
 ## Development Workflow
@@ -116,20 +167,47 @@ In `app/core/server.py`, middlewares are applied in reverse order:
 3. TrustedHostMiddleware (production only)
 4. CORSMiddleware (runs first)
 
-### ML Components
+### ML Components (IndoBERT Proposal Classification)
 
-- ML models stored in path from `settings.ml_models_path` env var
-- `app/ml/` is structured for inference logic, models, and preprocessing
-- Currently placeholder - when implementing ML features, follow this structure
+**Active ML feature:** Fine-tuned IndoBERT model for proposal classification (pass/reject)
+
+- Model stored in `app/ml/indobert_full_proposal_finetuned/` (safetensors format)
+- `ProposalClassifierService` in `app/services/proposal_classifier_service.py`
+- Singleton pattern: `get_proposal_classifier()` dependency
+- `PDFParserService` extracts structured sections from proposal PDFs
+- Routes in `app/api/routes/proposal_route.py`:
+  - `/api/proposal/classify/tenant/{tenant_id}` - classify from tenant's uploaded proposal
+  - `/api/proposal/classify/url` - classify from PDF URL
+  - `/api/proposal/classify/text` - classify from raw text
+  - `/api/proposal/classify/sections` - classify from structured sections
+
+**Pattern for ML services:**
+
+```python
+# Singleton instance
+classifier_instance = None
+
+def get_proposal_classifier() -> ProposalClassifierService:
+    global classifier_instance
+    if classifier_instance is None:
+        classifier_instance = ProposalClassifierService()
+    return classifier_instance
+```
 
 ### Models Directory
 
 `app/models/` is for **data models** (DTOs, ORM models), NOT ML models:
 
-- Pydantic models for request/response DTOs in `app/models/dto/` (e.g., `auth_dto.py`, `user_dto.py`)
-- SQLAlchemy ORM models for database tables (e.g., `user_model.py`)
-- `app/models/__init__.py` centralizes all model imports for SQLAlchemy metadata registration
-- Domain models/dataclasses
+- **ORM models:** `user_model.py`, `tenant_model.py` (SQLAlchemy tables)
+- **DTOs:** `app/models/dto/` - `auth_dto.py`, `tenant_dto.py`, `proposal_dto.py` (Pydantic)
+- `app/models/__init__.py` centralizes imports for SQLAlchemy metadata
+- Always import new models in `__init__.py` before running Alembic migrations
+
+**Key models:**
+
+- `User` - Short ID (4 chars), Firebase UID, role (admin/tenant/guest)
+- `Tenant` - Incubator applicant with business info, status (pending/approved/rejected)
+- `BusinessDocument` - Stores proposal URLs, logos, links to tenant
 
 ### Logging
 
@@ -137,48 +215,125 @@ In `app/core/server.py`, middlewares are applied in reverse order:
 - Log level controlled by `LOG_LEVEL` env var
 - Request timing is automatically logged by middleware (see `server.py:add_timing`)
 
+## File Upload & Cloud Storage
+
+**Cloudflare R2** (S3-compatible) for file storage:
+
+- `app/core/object_storage.py` - Singleton R2Client using boto3
+- `app/services/file_upload_service.py` - Upload service with validation
+- `file_upload_service` global instance for easy import
+- Used by tenant registration for proposal PDFs, logos, documents
+
+**Upload pattern:**
+
+```python
+from app.services.file_upload_service import file_upload_service
+
+@router.post("/upload")
+async def upload(file: UploadFile = File(...)):
+    try:
+        url = await file_upload_service.upload_file(
+            file,
+            folder="tenants",
+            allowed_extensions=[".pdf", ".jpg"],
+            max_size_mb=10
+        )
+        return create_success_response(data={"url": url})
+    except Exception as e:
+        return create_error_response(message=str(e))
+```
+
+**Config:** R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL in `.env`
+
 ## Key Files Reference
 
-| File                           | Purpose                                                       |
-| ------------------------------ | ------------------------------------------------------------- |
-| `app/core/server.py`           | Application factory, middleware setup, root routes            |
-| `app/core/config.py`           | Centralized configuration (Settings class)                    |
-| `app/core/schema.py`           | Standard response schemas and helper functions                |
-| `app/core/database.py`         | SQLAlchemy engine, session management, database init          |
-| `app/core/security.py`         | Firebase authentication, JWT verification, dependencies       |
-| `app/api/router.py`            | API route aggregator (includes all route modules)             |
-| `app/api/health_route.py`      | Health check endpoint                                         |
-| `app/api/routes/auth_route.py` | Authentication routes (login, profile, update, deactivate)    |
-| `app/models/__init__.py`       | Model registration for SQLAlchemy metadata                    |
-| `app/models/user_model.py`     | User ORM model with short ID, role, and Firebase integration  |
-| `app/models/dto/auth_dto.py`   | Authentication request/response DTOs (Pydantic)               |
-| `app/services/auth_service.py` | Auth business logic with short ID generation                  |
-| `app/services/health.py`       | Health check service                                          |
-| `alembic.ini`                  | Alembic configuration for database migrations                 |
-| `alembic/env.py`               | Alembic environment setup with auto-discovery                 |
-| `alembic/versions/`            | Migration history (4 migrations: initial, UUID, role changes) |
-| `pyproject.toml`               | Dependencies and project metadata (managed by uv)             |
-| `firebase-credentials.json`    | Firebase service account credentials (gitignored)             |
-| `docs/QUICKSTART.md`           | Quick start guide for getting started                         |
-| `docs/MIGRATION_GUIDE.md`      | Database migrations guide with Alembic                        |
-| `docs/SETUP_AUTH.md`           | Firebase authentication setup guide                           |
+| File/Directory                                | Purpose                                               |
+| --------------------------------------------- | ----------------------------------------------------- |
+| `app/core/server.py`                          | Application factory, middleware, root routes          |
+| `app/core/config.py`                          | Settings (Pydantic), all env vars                     |
+| `app/core/schema.py`                          | BaseResponse, create_success/error_response helpers   |
+| `app/core/database.py`                        | SQLAlchemy engine, get_db dependency                  |
+| `app/core/middleware.py`                      | Firebase auth middleware, get_current_user dependency |
+| `app/core/object_storage.py`                  | R2Client singleton for Cloudflare R2                  |
+| `app/core/utils.py`                           | generate_short_id() - 4-char IDs for users/tenants    |
+| `app/api/router.py`                           | router_v1 aggregator for all API routes               |
+| `app/api/routes/auth_route.py`                | Login, profile, update (Firebase auth)                |
+| `app/api/routes/tenant_route.py`              | Register tenant, approve/reject (admin), list         |
+| `app/api/routes/proposal_route.py`            | AI proposal classification endpoints                  |
+| `app/services/tenant_service.py`              | Tenant registration, approval workflow                |
+| `app/services/proposal_classifier_service.py` | IndoBERT model loading & inference                    |
+| `app/services/pdf_parser_service.py`          | Extract sections from proposal PDFs                   |
+| `app/services/file_upload_service.py`         | R2 file upload with validation                        |
+| `app/repositories/tenant_repository.py`       | TenantRepository, BusinessDocumentRepository          |
+| `app/repositories/user_repository.py`         | UserRepository for user queries                       |
+| `app/models/user_model.py`                    | User ORM (short ID, Firebase UID, role enum)          |
+| `app/models/tenant_model.py`                  | Tenant, BusinessDocument ORM (status enum)            |
+| `app/ml/indobert_full_proposal_finetuned/`    | Fine-tuned IndoBERT model files                       |
+| `docs/PROPOSAL_CLASSIFICATION.md`             | ML service architecture & usage guide                 |
+| `docs/SETUP_AUTH.md`                          | Firebase setup instructions                           |
 
 ## Common Tasks
 
-**Add a new API endpoint:**
+**Add API endpoint with repository pattern:**
 
-1. Create `app/api/routes/feature_route.py` with router
-2. Include in `app/api/router.py`: `api_router.include_router(feature_route.router)`
-3. Use `BaseResponse` model and `create_success_response()` helper
+1. Create ORM model in `app/models/` (if needed), import in `app/models/__init__.py`
+2. Create repository in `app/repositories/feature_repository.py`
+3. Create service in `app/services/feature_service.py` (inject repositories)
+4. Create route in `app/api/routes/feature_route.py`:
 
-**Add a new database model:**
+   ```python
+   def get_service(db: Session = Depends(get_db)) -> FeatureService:
+       return FeatureService(FeatureRepository(db))
 
-1. Create SQLAlchemy model in `app/models/feature_model.py`
-2. Import in `app/models/__init__.py` to register with Base.metadata
-3. Create Pydantic DTOs in `app/models/dto/feature_dto.py`
-4. Generate migration: `uv run alembic revision --autogenerate -m "Add feature table"`
-5. Review generated migration in `alembic/versions/`
-6. Apply migration: `uv run alembic upgrade head`
+   @router.post("/", response_model=BaseResponse)
+   async def create(data: FeatureDTO, service = Depends(get_service)):
+       return service.create_feature(data)
+   ```
+
+5. Include in `app/api/router.py`: `router_v1.include_router(feature_route.router)`
+
+**Add database model:**
+
+1. Create in `app/models/feature_model.py` inheriting `Base`
+2. Add `__tablename__`, `__table_args__ = {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"}`
+3. Add ID (CHAR(4) for short IDs or String/UUID), timestamps (created_at, updated_at)
+4. Include `to_dict()` method
+5. Import in `app/models/__init__.py`
+6. Generate migration: `uv run alembic revision --autogenerate -m "Add feature table"`
+7. Review migration, then `uv run alembic upgrade head`
+
+**Add protected endpoint (requires auth):**
+
+```python
+from app.core.middleware import get_current_user_firebase_uid
+from app.repositories.user_repository import UserRepository
+
+@router.get("/protected")
+async def protected(
+    firebase_uid: str = Depends(get_current_user_firebase_uid),
+    db: Session = Depends(get_db)
+):
+    user = UserRepository(db).get_by_firebase_uid(firebase_uid)
+    return create_success_response(data={"user_id": user.id})
+```
+
+**Require admin role:**
+
+```python
+def require_admin_role(
+    firebase_uid: str = Depends(get_current_user_firebase_uid),
+    db: Session = Depends(get_db)
+) -> str:
+    user = UserRepository(db).get_by_firebase_uid(firebase_uid)
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    return user.id
+
+@router.post("/admin-only")
+async def admin_endpoint(user_id: str = Depends(require_admin_role)):
+    # Only admins can access
+    pass
+```
 
 **Add environment variable:**
 
@@ -199,46 +354,42 @@ Add in `app/core/server.py:setup_middlewares()` using `app.add_middleware()` or 
 4. Store user info from response
 5. For protected endpoints, include: `Authorization: Bearer <token>`
 
-**Backend protected route:**
+**Backend protected route (use repositories, not raw queries):**
 
 ```python
-from app.core.security import get_current_user_firebase_uid
-from app.core.database import get_db
-from app.models.user_model import User
-from sqlalchemy.orm import Session
+from app.core.middleware import get_current_user_firebase_uid
+from app.repositories.user_repository import UserRepository
 
 @router.get("/protected")
 async def protected(
     firebase_uid: str = Depends(get_current_user_firebase_uid),
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
-    # ... use user data
+    user = UserRepository(db).get_by_firebase_uid(firebase_uid)
+    return create_success_response(data=user.to_dict())
 ```
 
-**Available auth endpoints:**
+**Auth endpoints:**
 
-- `POST /api/auth/login` - Login/register with Firebase token
-- `GET /api/auth/me` - Get current user profile (protected)
-- `PUT /api/auth/me` - Update profile (protected)
-- `DELETE /api/auth/me` - Deactivate account (protected)
+- `POST /api/auth/login` - Login/register with Firebase token (creates user if not exists)
+- `GET /api/auth/me` - Current user profile
+- `PUT /api/auth/me` - Update profile
+- `DELETE /api/auth/me` - Soft delete (set is_active=False)
 
-**Dependencies for protected routes:**
+**Tenant endpoints (with role checks):**
 
-```python
-from app.core.security import get_current_user_firebase_uid
-from app.core.database import get_db
-from sqlalchemy.orm import Session
+- `POST /api/tenant/register` - Submit tenant application (with file uploads)
+- `GET /api/tenant` - List all tenants (admin only)
+- `GET /api/tenant/{id}` - Get tenant details
+- `GET /api/tenant/me` - Current user's tenant application
+- `PUT /api/tenant/{id}/status` - Approve/reject tenant (admin only)
 
-@router.get("/protected")
-async def protected_endpoint(
-    firebase_uid: str = Depends(get_current_user_firebase_uid),
-    db: Session = Depends(get_db)
-):
-    # firebase_uid is verified, query user from database
-    user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
-    return create_success_response(data={"user_id": user.id})
-```
+**Proposal classification endpoints:**
+
+- `POST /api/proposal/classify/tenant/{tenant_id}` - Classify tenant's proposal
+- `POST /api/proposal/classify/url` - Classify from PDF URL
+- `POST /api/proposal/classify/text` - Classify raw text
+- `POST /api/proposal/classify/sections` - Classify structured sections
 
 ## Database Setup
 
@@ -340,32 +491,27 @@ uv run alembic revision -m "Custom data migration"
 - `created_at`, `updated_at` (DateTime with timezone)
 - `last_login` (DateTime, nullable)
 
-**User Role System:**
+**User & Tenant Roles:**
 
-The project implements a three-tier role system (UserRole enum in user_model.py):
+- `UserRole.ADMIN` - Approve/reject tenants, full system access
+- `UserRole.TENANT` - Approved incubator participant (set when tenant approved)
+- `UserRole.GUEST` - Default role, can register as tenant applicant
 
-- `ADMIN` - Full system access, can approve tenant requests
-- `TENANT` - Approved user with full application access
-- `GUEST` - Default role after registration, limited access (awaiting approval)
+**Tenant Status Flow:**
 
-New users are automatically assigned the `guest` role upon registration. Admins can promote users to `tenant` status.
+1. Guest user submits `/api/tenant/register` → `TenantStatus.PENDING`
+2. Admin reviews `/api/tenant/{id}/status` → `APPROVED` or `REJECTED`
+3. If approved, user role upgraded to `UserRole.TENANT`
 
 **Short ID System:**
 
-User IDs use a compact 4-character format (A-Z, 0-9) for:
+Both User and Tenant use 4-char IDs (A-Z, 0-9): `generate_short_id()` from `app/core/utils`
 
-- Human-readable identifiers in UI
-- QR codes and compact displays
-- Easy reference in support tickets
+```python
+from app.core.utils import generate_short_id
 
-Generated via `auth_service.generate_short_id()` using cryptographically secure random generation (36^4 = 1,679,616 combinations).
+id = generate_short_id()  # e.g., "A1B2"
+# Check uniqueness in repository before committing
+```
 
-**When adding new models:**
-
-1. Inherit from `Base` (from `app.core.database`)
-2. Use `__tablename__` for explicit table name
-3. Add `__table_args__ = {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"}` for MySQL compatibility
-4. Include `created_at` and `updated_at` timestamp columns
-5. Add indexes on frequently queried columns
-6. Import in `app/models/__init__.py` for metadata registration
-7. Include `to_dict()` method for easy serialization
+36^4 = 1,679,616 combinations - always check uniqueness in repository create methods

@@ -8,8 +8,8 @@ from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.middleware import get_current_user_firebase_uid
-from app.core.schema import BaseResponse, create_success_response, create_error_response
-from app.models.dto.tenant_dto import TenantRegisterRequest, TenantUpdateStatusRequest
+from app.core.schema import BaseResponse
+from app.models.dto.tenant_dto import TenantRegisterRequest, TenantUpdateStatusRequest, TenantUpdateRequest
 from app.services.file_upload_service import file_upload_service
 from app.services.tenant_service import TenantService
 from app.repositories.tenant_repository import (
@@ -237,6 +237,172 @@ async def get_all_tenants(
         limit=limit,
     )
 
+@router.put("/{tenant_id}", response_model=BaseResponse)
+async def update_tenant(
+    tenant_id: str,
+    # Form fields (optional)
+    nama_ketua_tim: Optional[str] = Form(None),
+    nim_nidn_ketua: Optional[str] = Form(None),
+    nomor_telepon: Optional[str] = Form(None),
+    fakultas: Optional[str] = Form(None),
+    prodi: Optional[str] = Form(None),
+    nama_bisnis: Optional[str] = Form(None),
+    kategori_bisnis: Optional[str] = Form(None),
+    alamat_usaha: Optional[str] = Form(None),
+    jenis_usaha: Optional[str] = Form(None),
+    lama_usaha: Optional[int] = Form(None),
+    omzet: Optional[float] = Form(None),
+    nama_anggota_tim: Optional[str] = Form(None),
+    nim_nidn_anggota: Optional[str] = Form(None),
+    akun_medsos: Optional[str] = Form(None),
+    # File uploads (optional) - akan replace file lama
+    logo: Optional[UploadFile] = File(None),
+    sertifikat_nib: Optional[UploadFile] = File(None),
+    proposal: Optional[UploadFile] = File(None),
+    bmc: Optional[UploadFile] = File(None),
+    rab: Optional[UploadFile] = File(None),
+    laporan_keuangan: Optional[UploadFile] = File(None),
+    foto_produk: Optional[List[UploadFile]] = File(None),
+    # Dependencies
+    user_id: str = Depends(get_user_id_from_firebase),
+    tenant_service: TenantService = Depends(get_tenant_service),
+):
+    '''
+    Update data dan dokumen tenant (Tenant owner only).
+
+    **Endpoint ini memungkinkan tenant owner untuk mengubah data pendaftaran dan dokumen mereka.**
+
+    **Aturan update:**
+    - Hanya tenant owner yang dapat mengubah datanya sendiri
+    - Hanya tenant dengan status PENDING yang dapat diubah
+    - Semua field bersifat opsional (hanya field yang dikirim yang akan diupdate)
+    - **File lama akan dihapus sebelum upload file baru**
+
+    **Form fields yang dapat diupdate:**
+    - nama_ketua_tim
+    - nim_nidn_ketua
+    - nama_anggota_tim
+    - nim_nidn_anggota
+    - nomor_telepon
+    - fakultas
+    - prodi
+    - nama_bisnis
+    - kategori_bisnis
+    - alamat_usaha
+    - jenis_usaha
+    - lama_usaha (dalam bulan)
+    - omzet
+    - akun_medsos (JSON string)
+
+    **File uploads (opsional) - akan replace file lama:**
+    - logo (JPG/PNG, max 2MB)
+    - sertifikat_nib (PDF/JPG/PNG, max 5MB)
+    - proposal (PDF/DOC/DOCX, max 10MB)
+    - bmc (PDF/JPG/PNG, max 5MB)
+    - rab (PDF/XLS/XLSX, max 5MB)
+    - laporan_keuangan (PDF/XLS/XLSX, max 10MB)
+    - foto_produk[] (Multiple JPG/PNG, max 5MB per file)
+
+    **Proses update file:**
+    1. File lama akan dihapus dari storage
+    2. File baru akan diupload
+    3. URL baru akan disimpan di database
+
+    **Returns:**
+    {
+        "status": "success",
+        "message": "Tenant updated successfully",
+        "data": {
+        }
+    }
+    - Data tenant yang sudah diperbarui
+    - Jumlah file lama yang berhasil dihapus
+    - Error jika tenant tidak ditemukan atau tidak memiliki akses
+    - Error jika status tenant bukan PENDING
+
+    **Requires authentication:**
+    ```
+    Authorization: Bearer <firebase_id_token>
+    ```
+
+    **Note:** 
+    - Status tenant tidak dapat diubah oleh owner (hanya admin yang dapat mengubah status)
+    - Pastikan file yang diupload sesuai dengan format dan ukuran yang diizinkan
+    '''
+    from app.models.dto.tenant_dto import TenantUpdateRequest
+    
+    # Check if there are any form fields to update
+    has_form_updates = any([
+        nama_ketua_tim, nim_nidn_ketua, nomor_telepon, fakultas, prodi,
+        nama_bisnis, kategori_bisnis, alamat_usaha, jenis_usaha,
+        lama_usaha is not None, omzet is not None,
+        nama_anggota_tim, nim_nidn_anggota
+    ])
+    
+    # Check if there are any file uploads
+    has_file_uploads = any([
+        logo and logo.filename,
+        sertifikat_nib and sertifikat_nib.filename,
+        proposal and proposal.filename,
+        bmc and bmc.filename,
+        rab and rab.filename,
+        laporan_keuangan and laporan_keuangan.filename,
+        foto_produk and len([f for f in foto_produk if f.filename]) > 0,
+        akun_medsos is not None
+    ])
+    
+    if not has_form_updates and not has_file_uploads:
+        from app.core.schema import create_error_response
+        return create_error_response(
+            message="Tidak ada data atau file yang diupdate"
+        )
+    
+    # Update form data if provided
+    if has_form_updates:
+        data = TenantUpdateRequest(
+            nama_ketua_tim=nama_ketua_tim,
+            nim_nidn_ketua=nim_nidn_ketua,
+            nama_anggota_tim=nama_anggota_tim,
+            nim_nidn_anggota=nim_nidn_anggota,
+            nomor_telepon=nomor_telepon,
+            fakultas=fakultas,
+            prodi=prodi,
+            nama_bisnis=nama_bisnis,
+            kategori_bisnis=kategori_bisnis,
+            alamat_usaha=alamat_usaha,
+            jenis_usaha=jenis_usaha,
+            lama_usaha=lama_usaha,
+            omzet=omzet,
+            akun_medsos=None,  # Will be handled separately with files
+        )
+        
+        result = tenant_service.update_tenant(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            data=data,
+        )
+        
+        # If form update failed, return error
+        if result.status != "success":
+            return result
+    
+    # Update files if provided
+    if has_file_uploads:
+        return await tenant_service.update_tenant_documents(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            logo=logo,
+            sertifikat_nib=sertifikat_nib,
+            proposal=proposal,
+            bmc=bmc,
+            rab=rab,
+            laporan_keuangan=laporan_keuangan,
+            foto_produk=foto_produk,
+            akun_medsos=akun_medsos,
+        )
+    
+    # If only form data updated, return the result
+    return result
 
 @router.put("/{tenant_id}/status", response_model=BaseResponse)
 async def update_tenant_status(

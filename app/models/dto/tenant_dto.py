@@ -63,6 +63,59 @@ class TenantRegisterRequest(BaseModel):
             }
         }
 
+
+class TenantUpdateRequest(BaseModel):
+    """Request body for updating tenant data"""
+
+    # Team information
+    nama_ketua_tim: Optional[str] = Field(None, min_length=1, max_length=255)
+    nim_nidn_ketua: Optional[str] = Field(None, min_length=1, max_length=50)
+    nama_anggota_tim: Optional[str] = Field(None, max_length=255)
+    nim_nidn_anggota: Optional[str] = Field(None, max_length=50)
+    nomor_telepon: Optional[str] = Field(None, min_length=10, max_length=20)
+
+    # Academic information
+    fakultas: Optional[str] = Field(None, min_length=1, max_length=100)
+    prodi: Optional[str] = Field(None, min_length=1, max_length=100)
+
+    # Business information
+    nama_bisnis: Optional[str] = Field(None, min_length=1, max_length=255)
+    kategori_bisnis: Optional[str] = Field(None, min_length=1, max_length=100)
+    alamat_usaha: Optional[str] = Field(None, min_length=1)
+    jenis_usaha: Optional[str] = Field(None, min_length=1, max_length=100)
+    lama_usaha: Optional[int] = Field(None, ge=0, description="Lama usaha dalam bulan")
+    omzet: Optional[Decimal] = Field(None, ge=0, description="Omzet usaha")
+
+    # Social media accounts (JSON string)
+    akun_medsos: Optional[str] = Field(
+        None, description="JSON string of social media accounts"
+    )
+
+    @field_validator("nomor_telepon")
+    @classmethod
+    def validate_phone(cls, value):
+        """Validate phone number format"""
+        if value is None:
+            return value
+        # Remove spaces and dashes
+        cleaned = value.replace(" ", "").replace("-", "")
+        if not cleaned.isdigit():
+            raise ValueError("Nomor telepon harus berisi angka saja")
+        if not cleaned.startswith(("08", "62", "+62")):
+            raise ValueError("Nomor telepon harus dimulai dengan 08, 62, atau +62")
+        return value
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "nama_ketua_tim": "John Doe Updated",
+                "nomor_telepon": "081234567890",
+                "nama_bisnis": "Warung Kopi Startup 2.0",
+                "omzet": 75000000,
+            }
+        }
+
+
 class BusinessDocumentRequest(BaseModel):
     """
     Request body for business document uploads
